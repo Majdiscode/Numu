@@ -9,16 +9,11 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
+        // V2 Architecture: System -> Tasks -> Tests
+        SystemsDashboardView()
+
+        // V1 (Legacy): Uncomment to use old Habit-based view
+        // DashboardView()
     }
 }
 
-#Preview {
-    ContentView()
-}
