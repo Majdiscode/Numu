@@ -20,31 +20,27 @@ struct NumuApp: App {
 
         do {
             print("")
-            print("📦 [STAGE 2-3] Initializing with CloudKit Support")
-            print("    V1 Models (baseline):")
-            print("      - Habit.self")
-            print("      - HabitLog.self")
-            print("      - SystemMetrics.self")
-            print("      - MetricEntry.self")
-            print("")
-            print("    NEW V2 Models (with optional relationships):")
+            print("📦 [FINAL] Initializing Numu with CloudKit Support")
+            print("    Models (all CloudKit-ready with optional relationships):")
             print("      - System.self")
-            print("      - HabitTask.self (renamed from Task)")
-            print("      - HabitTaskLog.self (renamed from TaskLog)")
-            print("      - PerformanceTest.self (renamed from Test)")
-            print("      - PerformanceTestEntry.self (renamed from TestEntry)")
+            print("      - HabitTask.self")
+            print("      - HabitTaskLog.self")
+            print("      - PerformanceTest.self")
+            print("      - PerformanceTestEntry.self")
             print("")
             print("    ☁️ CloudKit Configuration:")
             print("       - Container ID: iCloud.com.majdiskandarani.Numu")
-            print("       - Database: .automatic (uses entitlements)")
-            print("       - All relationships: OPTIONAL (CloudKit requirement)")
+            print("       - Database: .automatic (syncs across all devices)")
+            print("       - All relationships: OPTIONAL ✅")
 
-            // STAGE 2-3: Add CloudKit support with explicit configuration
             print("")
-            print("🔧 [STEP 1] Creating explicit Schema...")
+            print("🔧 [STEP 1] Creating Schema...")
             let schema = Schema([
-                System.self, HabitTask.self, HabitTaskLog.self, PerformanceTest.self, PerformanceTestEntry.self,
-                Habit.self, HabitLog.self, SystemMetrics.self, MetricEntry.self
+                System.self,
+                HabitTask.self,
+                HabitTaskLog.self,
+                PerformanceTest.self,
+                PerformanceTestEntry.self
             ])
             print("✅ Schema created with \(schema.entities.count) entities")
 
@@ -53,12 +49,9 @@ struct NumuApp: App {
             let configuration = ModelConfiguration(
                 schema: schema,
                 isStoredInMemoryOnly: false,
-                cloudKitDatabase: .automatic  // Uses iCloud container from entitlements
+                cloudKitDatabase: .automatic
             )
-            print("✅ ModelConfiguration created")
-            print("    - CloudKit container: iCloud.com.majdiskandarani.Numu")
-            print("    - Storage: Persistent (not in-memory)")
-            print("    - Sync: Automatic across all devices")
+            print("✅ ModelConfiguration created with CloudKit sync enabled")
 
             print("")
             print("🔧 [STEP 3] Creating ModelContainer...")
@@ -68,12 +61,12 @@ struct NumuApp: App {
             )
 
             print("")
-            print("✅ [STAGES 2-3] ModelContainer initialized successfully!")
-            print("    - Schema entities: \(modelContainer.schema.entities.count)")
-            print("    - CloudKit: ENABLED")
-            print("    - Entities registered:")
+            print("✅ [SUCCESS] ModelContainer initialized!")
+            print("    - Total entities: \(modelContainer.schema.entities.count)")
+            print("    - CloudKit: ENABLED ☁️")
+            print("    - Syncing across all Apple devices")
             for (index, entity) in modelContainer.schema.entities.enumerated() {
-                print("      \(index + 1). \(entity.name) (\(entity.properties.count) properties, \(entity.relationships.count) relationships)")
+                print("      \(index + 1). \(entity.name)")
             }
 
         } catch {
@@ -100,8 +93,8 @@ struct NumuApp: App {
 
         print("")
         print("🎉 [NUMU] ========================================")
-        print("🎉 [NUMU] STAGES 2-3 COMPLETE!")
-        print("🎉 [NUMU] CloudKit + SwiftData Ready to Sync!")
+        print("🎉 [NUMU] APP READY!")
+        print("🎉 [NUMU] CloudKit Sync ☁️ + Full UI ✅")
         print("🎉 [NUMU] ========================================")
     }
 
