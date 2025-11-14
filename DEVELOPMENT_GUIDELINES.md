@@ -5,6 +5,172 @@ A sleek, minimalist iOS habit tracking app based on **Atomic Habits** principles
 
 ---
 
+## 🐛 SYSTEMATIC DEBUGGING METHODOLOGY (CRITICAL - READ FIRST)
+
+### Philosophy: One Feature at a Time, One Test at a Time
+
+**NEVER** add multiple features simultaneously. **ALWAYS** debug systematically stage-by-stage.
+
+### The Stage-by-Stage Approach
+
+When adding complex features or debugging broken code:
+
+**1. Break Down Into Stages**
+   - Identify all components: Models → Services → UI → Integration
+   - Number each stage (Stage 1, Stage 2, etc.)
+   - Each stage should be independently testable
+
+**2. Disable UI When Testing Backend**
+   - Use placeholder screens to isolate issues
+   - Example:
+     ```swift
+     struct ContentView: View {
+         var body: some View {
+             // STAGE 1: Testing backend initialization only
+             Text("STAGE 1: Backend Testing")
+                 .font(.largeTitle)
+
+             // STAGE 2: Will enable UI after backend works
+             // SystemsDashboardView()
+         }
+     }
+     ```
+   - This immediately tells you if the problem is frontend or backend
+
+**3. Add Extensive Logging**
+   - Log EVERY step of initialization
+   - Use clear emoji indicators:
+     ```swift
+     print("🚀 [APP] Starting initialization")
+     print("📦 [STAGE 1] Loading models...")
+     print("✅ [SUCCESS] Models loaded: \(count)")
+     print("❌ [ERROR] Failed to load: \(error)")
+     ```
+   - Include detailed error information:
+     ```swift
+     if let nsError = error as NSError? {
+         print("❌ NSError Details:")
+         print("   - Domain: \(nsError.domain)")
+         print("   - Code: \(nsError.code)")
+         print("   - UserInfo:")
+         for (key, value) in nsError.userInfo {
+             print("     • \(key): \(value)")
+         }
+     }
+     ```
+
+**4. Test Each Stage Before Proceeding**
+   - Build → Run → Check logs → Verify UI
+   - If stage fails: STOP and fix before moving forward
+   - If stage succeeds: Commit to Git before next stage
+
+**5. Git Commits Per Stage**
+   - Commit after each successful stage
+   - Clear commit messages: `[STAGE 1] Add models with optional relationships`
+   - Easy to rollback if next stage breaks
+
+### Real Example: CloudKit Integration (Nov 2024)
+
+**Problem:** App wouldn't run after adding CloudKit sync
+
+**❌ Wrong Approach:**
+- Add all features at once (models + CloudKit + UI)
+- App crashes
+- No idea which component is broken
+- Spend hours guessing
+
+**✅ Correct Approach Used:**
+
+**Stage 1: Models Only**
+```swift
+// NumuApp.swift
+modelContainer = try ModelContainer(
+    for: System.self, HabitTask.self, HabitTaskLog.self,
+         PerformanceTest.self, PerformanceTestEntry.self,
+    configurations: ModelConfiguration(isStoredInMemoryOnly: false)
+)
+
+// ContentView.swift
+Text("STAGE 1: V1 Baseline")  // No complex UI yet
+```
+✅ Result: Built & ran successfully → Commit `[STAGE 1]`
+
+**Stage 2-3: Add CloudKit Configuration**
+```swift
+let configuration = ModelConfiguration(
+    schema: schema,
+    cloudKitDatabase: .automatic
+)
+```
+✅ Result: Built & ran → Shows CloudKit icon → Commit `[STAGES 2-3]`
+
+**Stage 4: Enable Full UI**
+```swift
+// ContentView.swift
+SystemsDashboardView()  // Now show real UI
+```
+❌ Result: Error! CloudKit rejected V1 models (non-optional relationships)
+
+**Root Cause Identified:** The staged approach immediately showed the problem was in V1 models, not UI or CloudKit setup.
+
+**Fix:** Remove V1 models entirely → Success!
+
+### When to Use This Methodology
+
+**ALWAYS use for:**
+- Adding major features (CloudKit, notifications, widgets)
+- Debugging production crashes
+- Refactoring core architecture
+- Integrating third-party frameworks
+
+**Example Breakdown:**
+
+**Adding Push Notifications:**
+- Stage 1: Add entitlements only, log permissions → Test
+- Stage 2: Add notification service, log registration → Test
+- Stage 3: Add UI for notification settings → Test
+- Stage 4: Integrate with existing features → Test
+
+**Adding Widgets:**
+- Stage 1: Create widget extension, static data → Test
+- Stage 2: Connect to SwiftData, log data fetching → Test
+- Stage 3: Add real-time updates → Test
+- Stage 4: Polish UI and interactions → Test
+
+### Debugging Checklist
+
+Before declaring "it doesn't work":
+
+1. ✅ Did you test with a placeholder UI?
+2. ✅ Did you add logging at every step?
+3. ✅ Did you check the console for ALL error messages?
+4. ✅ Did you verify each stage independently?
+5. ✅ Did you commit working stages before proceeding?
+
+### Key Lessons
+
+**Isolation is Everything:**
+- Backend issue? Use placeholder UI
+- UI issue? Mock the backend
+- Integration issue? Test components separately first
+
+**Logs Tell the Story:**
+- Good logs show you exactly where it broke
+- Bad logs leave you guessing
+- NO logs = debugging nightmare
+
+**Git is Your Safety Net:**
+- Working stage? Commit it
+- Next stage breaks? `git reset --hard` to last working commit
+- Can't fix it? Revert and try a different approach
+
+**One Feature, One Test:**
+- Adding multiple features simultaneously = debugging chaos
+- Adding one feature at a time = clear cause and effect
+- Know exactly what broke and why
+
+---
+
 ## ⚠️ CRITICAL RULES (READ FIRST)
 
 ### 1. NEVER Build to Simulator
