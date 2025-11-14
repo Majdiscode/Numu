@@ -114,7 +114,7 @@ struct SystemDetailView: View {
 
                 SystemStatCard(
                     title: "Active Tests",
-                    value: "\(system.tests.count)",
+                    value: "\(system.tests?.count ?? 0)",
                     icon: "chart.bar.fill",
                     color: .purple
                 )
@@ -136,13 +136,13 @@ struct SystemDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if system.tasks.isEmpty {
+            if system.tasks?.isEmpty ?? true {
                 Text("No tasks in this system yet")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding()
             } else {
-                ForEach(system.tasks) { task in
+                ForEach(system.tasks ?? []) { task in
                     TaskDetailRow(task: task, modelContext: modelContext)
                 }
             }
@@ -159,13 +159,13 @@ struct SystemDetailView: View {
             Label("Periodic Tests", systemImage: "chart.bar")
                 .font(.headline)
 
-            if system.tests.isEmpty {
+            if system.tests?.isEmpty ?? true {
                 Text("No tests in this system yet")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding()
             } else {
-                ForEach(system.tests) { test in
+                ForEach(system.tests ?? []) { test in
                     TestCard(test: test, systemConsistency: system.overallConsistency)
                 }
             }
@@ -237,7 +237,7 @@ struct SystemStatCard: View {
 
 // MARK: - Task Detail Row
 struct TaskDetailRow: View {
-    let task: Task
+    let task: HabitTask
     let modelContext: ModelContext
 
     @State private var isCompleted: Bool = false
@@ -311,7 +311,7 @@ struct TaskDetailRow: View {
     private func toggleCompletion() {
         withAnimation(.spring(response: 0.3)) {
             if isCompleted {
-                if let todayLog = task.logs.first(where: { Calendar.current.isDateInToday($0.date) }) {
+                if let todayLog = task.logs?.first(where: { Calendar.current.isDateInToday($0.date) }) {
                     modelContext.delete(todayLog)
                 }
             }
@@ -328,12 +328,12 @@ struct TaskDetailRow: View {
 
 // MARK: - Test Card
 struct TestCard: View {
-    let test: Test
+    let test: PerformanceTest
     let systemConsistency: Double
 
     @State private var showTestEntry = false
 
-    var analytics: TestAnalytics {
+    var analytics: PerformanceTestAnalytics {
         test.getAnalytics(systemConsistency: systemConsistency)
     }
 
@@ -390,7 +390,7 @@ struct TestCard: View {
                     }
                 }
 
-                if test.entries.count >= 3 {
+                if (test.entries?.count ?? 0) >= 3 {
                     Text(analytics.consistencyCorrelation)
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -413,7 +413,7 @@ struct TaskCheckInView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    let task: Task
+    let task: HabitTask
 
     @State private var notes: String = ""
     @State private var satisfaction: Int = 5
@@ -490,7 +490,7 @@ struct TaskCheckInView: View {
     }
 
     private func completeTask() {
-        let log = TaskLog(
+        let log = HabitTaskLog(
             notes: notes.isEmpty ? nil : notes,
             satisfaction: satisfaction
         )
@@ -512,7 +512,7 @@ struct TestEntryView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
-    let test: Test
+    let test: PerformanceTest
 
     @State private var value: String = ""
     @State private var notes: String = ""
@@ -564,9 +564,9 @@ struct TestEntryView: View {
                     Text("Notes (Optional)")
                 }
 
-                if !test.entries.isEmpty {
+                if !(test.entries?.isEmpty ?? true) {
                     Section {
-                        ForEach(test.entries.sorted(by: { $0.date > $1.date }).prefix(3), id: \.id) { entry in
+                        ForEach((test.entries ?? []).sorted(by: { $0.date > $1.date }).prefix(3), id: \.id) { entry in
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
                                     Text("\(String(format: "%.1f", entry.value)) \(test.unit)")
@@ -622,7 +622,7 @@ struct TestEntryView: View {
     private func saveEntry() {
         guard let doubleValue = Double(value) else { return }
 
-        let entry = TestEntry(
+        let entry = PerformanceTestEntry(
             value: doubleValue,
             notes: notes.isEmpty ? nil : notes,
             conditions: conditions.isEmpty ? nil : conditions

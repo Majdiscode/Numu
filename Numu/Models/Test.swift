@@ -4,35 +4,62 @@
 //
 //  Created by Majd Iskandarani on 11/12/25.
 //
+// NOTE: Class renamed to PerformanceTest to avoid conflict with Swift.Test
 
 import Foundation
 import SwiftData
 
-/// A Test represents a periodic measurement for a System
+/// A PerformanceTest represents a periodic measurement for a System
 /// Example: "Mile time", "Max pushups" for "Hybrid Athlete" system
 @Model
-final class Test {
-    var id: UUID
-    var createdAt: Date
+final class PerformanceTest {
+    // CloudKit requires: all properties must have default values or be optional
+    var id: UUID = UUID()
+    var createdAt: Date = Date()
 
     // Test details
-    var name: String  // e.g., "Mile time", "Max pushups"
-    var unit: String  // e.g., "minutes", "reps"
+    var name: String = ""  // e.g., "Mile time", "Max pushups"
+    var unit: String = ""  // e.g., "minutes", "reps"
     var testDescription: String?
 
     // Goal configuration
-    var goalDirection: TestGoalDirection  // Higher or lower is better
+    var goalDirection: TestGoalDirection = TestGoalDirection.higher  // Higher or lower is better
     var targetValue: Double?  // Optional target to hit
 
-    // Tracking frequency
-    var trackingFrequency: TestFrequency  // How often to measure
+    // Tracking frequency - stored as separate properties for SwiftData compatibility
+    private var frequencyType: String = "weeks"  // "days" or "weeks"
+    private var frequencyCount: Int = 1
+
+    var trackingFrequency: TestFrequency {
+        get {
+            switch frequencyType {
+            case "days":
+                return TestFrequency.days(frequencyCount)
+            case "weeks":
+                return TestFrequency.weeks(frequencyCount)
+            default:
+                return TestFrequency.weekly
+            }
+        }
+        set {
+            switch newValue {
+            case .days(let count):
+                frequencyType = "days"
+                frequencyCount = count
+            case .weeks(let count):
+                frequencyType = "weeks"
+                frequencyCount = count
+            }
+        }
+    }
 
     // Relationship to parent System
     var system: System?
 
     // Relationship to measurement entries
-    @Relationship(deleteRule: .cascade, inverse: \TestEntry.test)
-    var entries: [TestEntry] = []
+    // CloudKit requires relationships to be optional
+    @Relationship(deleteRule: .cascade, inverse: \PerformanceTestEntry.test)
+    var entries: [PerformanceTestEntry]?
 
     init(
         name: String,
@@ -47,21 +74,30 @@ final class Test {
         self.name = name
         self.unit = unit
         self.goalDirection = goalDirection
-        self.trackingFrequency = trackingFrequency
         self.testDescription = description
         self.targetValue = targetValue
+
+        // Set tracking frequency via the setter
+        switch trackingFrequency {
+        case .days(let count):
+            self.frequencyType = "days"
+            self.frequencyCount = count
+        case .weeks(let count):
+            self.frequencyType = "weeks"
+            self.frequencyCount = count
+        }
     }
 
     // MARK: - Computed Properties
 
     /// Latest recorded value
     var latestValue: Double? {
-        entries.sorted { $0.date > $1.date }.first?.value
+        entries?.sorted { $0.date > $1.date }.first?.value
     }
 
     /// Best recorded value based on goal direction
     var bestValue: Double? {
-        guard !entries.isEmpty else { return nil }
+        guard let entries = entries, !entries.isEmpty else { return nil }
 
         switch goalDirection {
         case .higher:
@@ -73,7 +109,7 @@ final class Test {
 
     /// Overall improvement percentage
     var improvementPercentage: Double? {
-        guard entries.count >= 2 else { return nil }
+        guard let entries = entries, entries.count >= 2 else { return nil }
 
         let sorted = entries.sorted { $0.date < $1.date }
         let first = sorted.first!.value
@@ -105,7 +141,7 @@ final class Test {
 
     /// Check if test is due for a new measurement
     func isDue() -> Bool {
-        guard let lastEntry = entries.sorted(by: { $0.date > $1.date }).first else {
+        guard let entries = entries, let lastEntry = entries.sorted(by: { $0.date > $1.date }).first else {
             return true  // Never measured, so it's due
         }
 
@@ -115,7 +151,7 @@ final class Test {
 
     /// Get the next due date for this test
     func nextDueDate() -> Date? {
-        guard let lastEntry = entries.sorted(by: { $0.date > $1.date }).first else {
+        guard let entries = entries, let lastEntry = entries.sorted(by: { $0.date > $1.date }).first else {
             return Date()  // Due now
         }
 
@@ -127,8 +163,8 @@ final class Test {
     }
 
     /// Get analytics including system consistency correlation
-    func getAnalytics(systemConsistency: Double) -> TestAnalytics {
-        TestAnalytics(
+    func getAnalytics(systemConsistency: Double) -> PerformanceTestAnalytics {
+        return PerformanceTestAnalytics(
             test: self,
             systemConsistency: systemConsistency
         )
@@ -178,6 +214,40 @@ enum TestFrequency: Codable, Equatable, Hashable {
     static let weekly = TestFrequency.weeks(1)
     static let biweekly = TestFrequency.weeks(2)
     static let monthly = TestFrequency.days(30)
+
+    // MARK: - Codable Implementation
+    enum CodingKeys: String, CodingKey {
+        case type
+        case count
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let type = try container.decode(String.self, forKey: .type)
+        let count = try container.decode(Int.self, forKey: .count)
+
+        switch type {
+        case "days":
+            self = .days(count)
+        case "weeks":
+            self = .weeks(count)
+        default:
+            throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown TestFrequency type")
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        switch self {
+        case .days(let count):
+            try container.encode("days", forKey: .type)
+            try container.encode(count, forKey: .count)
+        case .weeks(let count):
+            try container.encode("weeks", forKey: .type)
+            try container.encode(count, forKey: .count)
+        }
+    }
 }
 
 // MARK: - Test Trend
@@ -207,14 +277,14 @@ enum TestTrend {
     }
 }
 
-// MARK: - Test Analytics
+// MARK: - Performance Test Analytics
 
-struct TestAnalytics {
-    let entries: [TestEntry]
+struct PerformanceTestAnalytics {
+    let entries: [PerformanceTestEntry]
     let systemConsistency: Double
 
-    init(test: Test, systemConsistency: Double) {
-        self.entries = test.entries
+    init(test: PerformanceTest, systemConsistency: Double) {
+        self.entries = test.entries ?? []
         self.systemConsistency = systemConsistency
     }
 

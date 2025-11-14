@@ -4,23 +4,25 @@
 //
 //  Created by Majd Iskandarani on 11/12/25.
 //
+// NOTE: Class renamed to HabitTaskLog to match HabitTask rename
 
 import Foundation
 import SwiftData
 
-/// A TaskLog represents a single completion of a Task
+/// A HabitTaskLog represents a single completion of a HabitTask
 @Model
-final class TaskLog {
-    var id: UUID
-    var date: Date  // Date when task was completed (normalized to start of day)
-    var completedAt: Date  // Actual timestamp of completion
+final class HabitTaskLog {
+    // CloudKit requires: all properties must have default values or be optional
+    var id: UUID = UUID()
+    var date: Date = Date()  // Date when task was completed (normalized to start of day)
+    var completedAt: Date = Date()  // Actual timestamp of completion
 
     // Optional completion metadata
     var notes: String?
     var satisfaction: Int?  // 1-5 scale
 
-    // Relationship to parent Task
-    var task: Task?
+    // Relationship to parent HabitTask
+    var task: HabitTask?
 
     init(
         date: Date = Date(),

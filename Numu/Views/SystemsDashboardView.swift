@@ -13,6 +13,7 @@ struct SystemsDashboardView: View {
     @Query private var systems: [System]
 
     @State private var showCreateSystem = false
+    @State private var cloudKitService = CloudKitService()
 
     var overallCompletionRate: Double {
         guard !systems.isEmpty else { return 0.0 }
@@ -32,6 +33,11 @@ struct SystemsDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    // MARK: - CloudKit Status Banner
+                    if cloudKitService.syncStatus == .notSignedIn {
+                        cloudKitStatusBanner
+                    }
+
                     // MARK: - Overall Progress
                     if !systems.isEmpty {
                         overallProgressCard
@@ -61,7 +67,53 @@ struct SystemsDashboardView: View {
             .sheet(isPresented: $showCreateSystem) {
                 CreateSystemView()
             }
+            .onAppear {
+                cloudKitService.checkAccountStatus()
+            }
         }
+    }
+
+    // MARK: - CloudKit Status Banner
+    private var cloudKitStatusBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: cloudKitService.syncStatus.icon)
+                .font(.title3)
+                .foregroundStyle(.orange)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("iCloud Sync Disabled")
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                Text("Sign into iCloud in Settings to sync across devices")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                if let url = URL(string: "App-prefs:APPLE_ACCOUNT") {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                Text("Settings")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.orange)
+                    .clipShape(Capsule())
+            }
+        }
+        .padding()
+        .background(Color.orange.opacity(0.1))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.orange.opacity(0.3), lineWidth: 1)
+        )
     }
 
     // MARK: - Overall Progress Card
@@ -283,7 +335,7 @@ struct SystemCard: View {
 
 // MARK: - Task Row Component
 struct TaskRow: View {
-    let task: Task
+    let task: HabitTask
     let modelContext: ModelContext
 
     @State private var isCompleted: Bool = false
@@ -325,12 +377,12 @@ struct TaskRow: View {
         withAnimation(.spring(response: 0.3)) {
             if isCompleted {
                 // Remove today's log
-                if let todayLog = task.logs.first(where: { Calendar.current.isDateInToday($0.date) }) {
+                if let todayLog = task.logs?.first(where: { Calendar.current.isDateInToday($0.date) }) {
                     modelContext.delete(todayLog)
                 }
             } else {
                 // Add today's log
-                let log = TaskLog()
+                let log = HabitTaskLog()
                 log.task = task
                 modelContext.insert(log)
             }

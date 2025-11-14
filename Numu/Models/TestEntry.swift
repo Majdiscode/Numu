@@ -4,25 +4,27 @@
 //
 //  Created by Majd Iskandarani on 11/12/25.
 //
+// NOTE: Class renamed to PerformanceTestEntry to match PerformanceTest rename
 
 import Foundation
 import SwiftData
 
-/// A TestEntry represents a single measurement of a Test
+/// A PerformanceTestEntry represents a single measurement of a PerformanceTest
 @Model
-final class TestEntry {
-    var id: UUID
-    var date: Date
+final class PerformanceTestEntry {
+    // CloudKit requires: all properties must have default values or be optional
+    var id: UUID = UUID()
+    var date: Date = Date()
 
     // Measurement data
-    var value: Double
+    var value: Double = 0.0
 
     // Optional metadata
     var notes: String?
     var conditions: String?  // e.g., "felt tired", "perfect weather"
 
-    // Relationship to parent Test
-    var test: Test?
+    // Relationship to parent PerformanceTest
+    var test: PerformanceTest?
 
     init(
         value: Double,

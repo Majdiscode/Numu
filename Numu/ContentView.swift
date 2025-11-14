@@ -9,11 +9,16 @@ import SwiftUI
 
 struct ContentView: View {
     var body: some View {
-        // V2 Architecture: System -> Tasks -> Tests
-        SystemsDashboardView()
+        // STAGE 1: Using V1 baseline - DashboardView
+        Text("STAGE 1: V1 Baseline")
+            .font(.largeTitle)
+            .padding()
 
-        // V1 (Legacy): Uncomment to use old Habit-based view
+        // V1 (Legacy): Will use this for baseline testing
         // DashboardView()
+
+        // V2 Architecture: System -> Tasks -> Tests
+        // SystemsDashboardView()  // Will enable in later stages
     }
 }
 

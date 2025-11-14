@@ -12,26 +12,28 @@ import SwiftData
 /// Example: "Hybrid Athlete", "Knowledge Worker", "Creative"
 @Model
 final class System {
-    var id: UUID
-    var createdAt: Date
+    // CloudKit requires: all properties must have default values or be optional
+    var id: UUID = UUID()
+    var createdAt: Date = Date()
 
     // Identity-based (Atomic Habits principle)
-    var name: String  // e.g., "Hybrid Athlete", "Consistent Reader"
+    var name: String = ""  // e.g., "Hybrid Athlete", "Consistent Reader"
     var systemDescription: String?  // Optional description of the system
 
     // Category for organization
-    var category: SystemCategory
+    var category: SystemCategory = SystemCategory.athletics
 
     // Visual customization
-    var color: String  // Hex color
-    var icon: String  // SF Symbol name
+    var color: String = "#FF6B35"  // Hex color
+    var icon: String = "figure.run"  // SF Symbol name
 
     // Relationships (using cascade delete for data integrity)
-    @Relationship(deleteRule: .cascade, inverse: \Task.system)
-    var tasks: [Task] = []
+    // CloudKit requires relationships to be optional
+    @Relationship(deleteRule: .cascade, inverse: \HabitTask.system)
+    var tasks: [HabitTask]?
 
-    @Relationship(deleteRule: .cascade, inverse: \Test.system)
-    var tests: [Test] = []
+    @Relationship(deleteRule: .cascade, inverse: \PerformanceTest.system)
+    var tests: [PerformanceTest]?
 
     init(
         name: String,
@@ -52,8 +54,8 @@ final class System {
     // MARK: - Computed Properties
 
     /// Tasks that should be completed today based on their frequency
-    var todaysTasks: [Task] {
-        tasks.filter { $0.isDueToday() }
+    var todaysTasks: [HabitTask] {
+        tasks?.filter { $0.isDueToday() } ?? []
     }
 
     /// Number of today's tasks that are completed
@@ -72,7 +74,7 @@ final class System {
         let daysSinceCreation = Calendar.current.dateComponents([.day], from: createdAt, to: Date()).day ?? 0
         guard daysSinceCreation > 0 else { return 0.0 }
 
-        let totalExpectedCompletions = tasks.reduce(0) { total, task in
+        let totalExpectedCompletions = (tasks ?? []).reduce(0) { total, task in
             // Calculate how many times this task should have been completed
             let taskDays = Calendar.current.dateComponents([.day], from: task.createdAt, to: Date()).day ?? 0
             return total + max(0, taskDays + 1)
@@ -80,7 +82,7 @@ final class System {
 
         guard totalExpectedCompletions > 0 else { return 0.0 }
 
-        let totalActualCompletions = tasks.reduce(0) { $0 + $1.logs.count }
+        let totalActualCompletions = (tasks ?? []).reduce(0) { $0 + ($1.logs?.count ?? 0) }
         return Double(totalActualCompletions) / Double(totalExpectedCompletions)
     }
 
@@ -90,13 +92,15 @@ final class System {
     }
 
     /// Tests that are due for measurement
-    var dueTests: [Test] {
-        tests.filter { $0.isDue() }
+    var dueTests: [PerformanceTest] {
+        tests?.filter { $0.isDue() } ?? []
     }
 
     // MARK: - Helper Methods
 
     private func calculateStreak() -> Int {
+        guard let tasks = tasks else { return 0 }
+
         var streak = 0
         var currentDate = Calendar.current.startOfDay(for: Date())
 

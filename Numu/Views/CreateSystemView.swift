@@ -230,7 +230,7 @@ struct CreateSystemView: View {
 
         // Create tasks
         for taskBuilder in tasks {
-            let task = Task(
+            let task = HabitTask(
                 name: taskBuilder.name,
                 description: taskBuilder.description,
                 frequency: taskBuilder.frequency
@@ -241,7 +241,7 @@ struct CreateSystemView: View {
 
         // Create tests
         for testBuilder in tests {
-            let test = Test(
+            let test = PerformanceTest(
                 name: testBuilder.name,
                 unit: testBuilder.unit,
                 goalDirection: testBuilder.goalDirection,
