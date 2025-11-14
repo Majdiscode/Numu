@@ -20,7 +20,7 @@ struct NumuApp: App {
 
         do {
             print("")
-            print("📦 [STAGE 1] Adding NEW models with CloudKit-compatible optional relationships")
+            print("📦 [STAGE 2-3] Initializing with CloudKit Support")
             print("    V1 Models (baseline):")
             print("      - Habit.self")
             print("      - HabitLog.self")
@@ -34,19 +34,43 @@ struct NumuApp: App {
             print("      - PerformanceTest.self (renamed from Test)")
             print("      - PerformanceTestEntry.self (renamed from TestEntry)")
             print("")
-            print("    🔍 KEY FIX: All @Relationship properties are NOW OPTIONAL (required for CloudKit)")
-            print("       Example: var tasks: [HabitTask]? (not [HabitTask] = [])")
+            print("    ☁️ CloudKit Configuration:")
+            print("       - Container ID: iCloud.com.majdiskandarani.Numu")
+            print("       - Database: .automatic (uses entitlements)")
+            print("       - All relationships: OPTIONAL (CloudKit requirement)")
 
-            // STAGE 1: Add new models with CloudKit-compatible optional relationships
+            // STAGE 2-3: Add CloudKit support with explicit configuration
+            print("")
+            print("🔧 [STEP 1] Creating explicit Schema...")
+            let schema = Schema([
+                System.self, HabitTask.self, HabitTaskLog.self, PerformanceTest.self, PerformanceTestEntry.self,
+                Habit.self, HabitLog.self, SystemMetrics.self, MetricEntry.self
+            ])
+            print("✅ Schema created with \(schema.entities.count) entities")
+
+            print("")
+            print("🔧 [STEP 2] Creating ModelConfiguration with CloudKit...")
+            let configuration = ModelConfiguration(
+                schema: schema,
+                isStoredInMemoryOnly: false,
+                cloudKitDatabase: .automatic  // Uses iCloud container from entitlements
+            )
+            print("✅ ModelConfiguration created")
+            print("    - CloudKit container: iCloud.com.majdiskandarani.Numu")
+            print("    - Storage: Persistent (not in-memory)")
+            print("    - Sync: Automatic across all devices")
+
+            print("")
+            print("🔧 [STEP 3] Creating ModelContainer...")
             modelContainer = try ModelContainer(
-                for: System.self, HabitTask.self, HabitTaskLog.self, PerformanceTest.self, PerformanceTestEntry.self,
-                     Habit.self, HabitLog.self, SystemMetrics.self, MetricEntry.self,
-                configurations: ModelConfiguration(isStoredInMemoryOnly: false)
+                for: schema,
+                configurations: configuration
             )
 
             print("")
-            print("✅ [STAGE 1] ModelContainer initialized successfully!")
+            print("✅ [STAGES 2-3] ModelContainer initialized successfully!")
             print("    - Schema entities: \(modelContainer.schema.entities.count)")
+            print("    - CloudKit: ENABLED")
             print("    - Entities registered:")
             for (index, entity) in modelContainer.schema.entities.enumerated() {
                 print("      \(index + 1). \(entity.name) (\(entity.properties.count) properties, \(entity.relationships.count) relationships)")
@@ -76,7 +100,8 @@ struct NumuApp: App {
 
         print("")
         print("🎉 [NUMU] ========================================")
-        print("🎉 [NUMU] STAGE 1 COMPLETE - V1 Baseline Ready!")
+        print("🎉 [NUMU] STAGES 2-3 COMPLETE!")
+        print("🎉 [NUMU] CloudKit + SwiftData Ready to Sync!")
         print("🎉 [NUMU] ========================================")
     }
 
