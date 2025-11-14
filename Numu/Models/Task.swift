@@ -27,16 +27,27 @@ final class HabitTask {
 
     var frequency: TaskFrequency {
         get {
-            switch frequencyType {
-            case "daily":
-                return TaskFrequency.daily
-            case "weekdays":
-                return TaskFrequency.weekdays
-            case "weekends":
-                return TaskFrequency.weekends
-            case "specificDays":
-                return TaskFrequency.specificDays(frequencyDays)
-            default:
+            // 🛡️ DEFENSIVE: Handle corrupted data from V1 schema migration
+            // If accessing frequencyDays causes issues, fallback to .daily
+            do {
+                switch frequencyType {
+                case "daily":
+                    return TaskFrequency.daily
+                case "weekdays":
+                    return TaskFrequency.weekdays
+                case "weekends":
+                    return TaskFrequency.weekends
+                case "specificDays":
+                    // Safely access frequencyDays - this may be corrupted from V1
+                    let days = frequencyDays.isEmpty ? [] : frequencyDays
+                    return TaskFrequency.specificDays(days)
+                default:
+                    print("⚠️ [HabitTask] Unknown frequencyType '\(frequencyType)', defaulting to .daily")
+                    return TaskFrequency.daily
+                }
+            } catch {
+                print("❌ [HabitTask] Error accessing frequency data: \(error)")
+                print("   Falling back to .daily frequency")
                 return TaskFrequency.daily
             }
         }

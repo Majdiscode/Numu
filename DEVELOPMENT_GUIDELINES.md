@@ -580,6 +580,107 @@ This works well for habits - conflicts are rare.
 
 ---
 
+## ⚠️ DATA MIGRATION & SCHEMA CHANGES
+
+### Problem: Corrupted V1 Data Syncing from CloudKit
+
+**Symptoms:**
+1. Delete app and reinstall
+2. App starts fresh (empty state) ✅
+3. Then old corrupted data syncs down from iCloud ❌
+4. App freezes/crashes when accessing old data
+
+**Why This Happens:**
+- Local database is deleted ✅
+- CloudKit container still has old V1 schema data ❌
+- CloudKit syncs old data back to fresh install
+- Old data incompatible with new V2 schema → crash
+
+### Solution: Change CloudKit Container ID
+
+**When to use:**
+- Making breaking schema changes (V1 → V2)
+- Old data is incompatible with new models
+- Can't/won't write migration logic
+- **Acceptable during development** (pre-production)
+
+**How to do it:**
+
+**1. Update Entitlements File:**
+```xml
+<!-- Numu.entitlements -->
+<key>com.apple.developer.icloud-container-identifiers</key>
+<array>
+    <!-- OLD: iCloud.com.majdiskandarani.Numu -->
+    <string>iCloud.com.majdiskandarani.Numu.v2</string>  ← Add version suffix
+</array>
+```
+
+**2. Update Xcode Project:**
+- Select target → **Signing & Capabilities**
+- Find **iCloud** section
+- Under **Containers**, change to new container ID
+- Xcode will auto-create the new container in CloudKit Dashboard
+
+**3. Add Database Reset Logic (Optional):**
+```swift
+// NumuApp.swift - Delete local store on schema change
+let storeURL = URL.applicationSupportDirectory.appending(path: "default.store")
+if FileManager.default.fileExists(atPath: storeURL.path) {
+    print("⚠️ [DATABASE] Deleting old store...")
+    try? FileManager.default.removeItem(at: storeURL)
+    try? FileManager.default.removeItem(at: storeURL.appending(path: "-shm"))
+    try? FileManager.default.removeItem(at: storeURL.appending(path: "-wal"))
+    print("✅ [DATABASE] Old store deleted, starting fresh")
+}
+```
+
+**4. Clean Everything:**
+```bash
+# Delete DerivedData
+rm -rf ~/Library/Developer/Xcode/DerivedData/Numu-*
+
+# In Xcode:
+# - Product → Clean Build Folder (⇧⌘K)
+# - Delete app from simulator/device
+# - Build and Run
+```
+
+**Result:**
+- ✅ Local database: Fresh (deleted)
+- ✅ CloudKit container: Fresh (new container ID)
+- ✅ No old data syncing down
+- ✅ Completely clean slate
+
+### When NOT to Change Container ID
+
+**Production apps with real users:**
+- Users will LOSE ALL DATA when container changes
+- Write proper migration logic instead
+- Use SwiftData schema versioning
+- Test migration thoroughly before shipping
+
+**During development (pre-launch):**
+- Changing container ID is acceptable ✅
+- No real user data to preserve
+- Fastest way to clean slate
+- Can iterate on schema freely
+
+### Real Example (Nov 2024)
+
+**Problem:** Changed from V1 models (non-optional relationships) to V2 models (optional relationships for CloudKit). Old task with V1 data caused app to freeze when accessed.
+
+**Attempted Fix #1:** Delete local database
+- Result: ❌ Old data synced back from CloudKit
+
+**Attempted Fix #2:** Delete app, reinstall
+- Result: ❌ Old data still synced back from CloudKit
+
+**Successful Fix:** Changed container ID from `iCloud.com.majdiskandarani.Numu` to `iCloud.com.majdiskandarani.Numu.v2`
+- Result: ✅ Completely fresh start, no old data
+
+---
+
 ## ✅ Code Quality
 
 ### Naming Conventions

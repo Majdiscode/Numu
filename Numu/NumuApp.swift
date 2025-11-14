@@ -29,9 +29,10 @@ struct NumuApp: App {
             print("      - PerformanceTestEntry.self")
             print("")
             print("    ☁️ CloudKit Configuration:")
-            print("       - Container ID: iCloud.com.majdiskandarani.Numu")
+            print("       - Container ID: iCloud.com.majdiskandarani.Numu.v2")
             print("       - Database: .automatic (syncs across all devices)")
             print("       - All relationships: OPTIONAL ✅")
+            print("       - ⚠️ Changed container to .v2 to avoid V1 corrupted data")
 
             print("")
             print("🔧 [STEP 1] Creating Schema...")
@@ -46,6 +47,20 @@ struct NumuApp: App {
 
             print("")
             print("🔧 [STEP 2] Creating ModelConfiguration with CloudKit...")
+
+            // 🛡️ DEFENSIVE: Delete existing store to prevent V1 schema corruption issues
+            let storeURL = URL.applicationSupportDirectory.appending(path: "default.store")
+            if FileManager.default.fileExists(atPath: storeURL.path) {
+                print("⚠️ [DATABASE] Found existing store at: \(storeURL.path)")
+                print("⚠️ [DATABASE] Deleting to prevent V1 schema corruption...")
+                try? FileManager.default.removeItem(at: storeURL)
+
+                // Also delete the -shm and -wal files
+                try? FileManager.default.removeItem(at: storeURL.appending(path: "-shm"))
+                try? FileManager.default.removeItem(at: storeURL.appending(path: "-wal"))
+                print("✅ [DATABASE] Old store deleted, starting fresh")
+            }
+
             let configuration = ModelConfiguration(
                 schema: schema,
                 isStoredInMemoryOnly: false,
