@@ -433,6 +433,14 @@ struct TestCard: View {
         test.getAnalytics(systemConsistency: systemConsistency)
     }
 
+    // Helper to format time values (seconds -> MM:SS)
+    private func formatTimeValue(_ seconds: Double) -> String {
+        let totalSeconds = Int(seconds)
+        let minutes = totalSeconds / 60
+        let remainingSeconds = totalSeconds % 60
+        return "\(minutes):\(String(format: "%02d", remainingSeconds))"
+    }
+
     var body: some View {
         Button {
             showTestEntry = true
@@ -465,13 +473,19 @@ struct TestCard: View {
 
                 if let latest = analytics.latestValue {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(String(format: "%.1f", latest))
-                            .font(.title2)
-                            .fontWeight(.bold)
+                        if test.unit == "time" {
+                            Text(formatTimeValue(latest))
+                                .font(.title2)
+                                .fontWeight(.bold)
+                        } else {
+                            Text(String(format: "%.1f", latest))
+                                .font(.title2)
+                                .fontWeight(.bold)
 
-                        Text(test.unit)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            Text(test.unit)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
 
                         Spacer()
 
@@ -710,8 +724,13 @@ struct TestEntryView: View {
                         ForEach((test.entries ?? []).sorted(by: { $0.date > $1.date }).prefix(3), id: \.id) { entry in
                             HStack {
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text("\(String(format: "%.1f", entry.value)) \(test.unit)")
-                                        .font(.headline)
+                                    if test.unit == "time" {
+                                        Text(formatTimeValue(entry.value))
+                                            .font(.headline)
+                                    } else {
+                                        Text("\(String(format: "%.1f", entry.value)) \(test.unit)")
+                                            .font(.headline)
+                                    }
 
                                     Text(relativeDateString(for: entry.date))
                                         .font(.caption)
@@ -799,5 +818,13 @@ struct TestEntryView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    // Helper to format time values (seconds -> MM:SS)
+    private func formatTimeValue(_ seconds: Double) -> String {
+        let totalSeconds = Int(seconds)
+        let minutes = totalSeconds / 60
+        let remainingSeconds = totalSeconds % 60
+        return "\(minutes):\(String(format: "%02d", remainingSeconds))"
     }
 }
