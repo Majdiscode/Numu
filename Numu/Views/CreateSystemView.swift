@@ -69,6 +69,7 @@ struct CreateSystemView: View {
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding()
+                            .listRowInsets(EdgeInsets())
                     } else {
                         ForEach(tasks) { task in
                             HStack {
@@ -114,6 +115,7 @@ struct CreateSystemView: View {
                             .foregroundStyle(.secondary)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding()
+                            .listRowInsets(EdgeInsets())
                     } else {
                         ForEach(tests) { test in
                             HStack {
