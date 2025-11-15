@@ -242,59 +242,135 @@ struct TaskDetailRow: View {
 
     @State private var isCompleted: Bool = false
     @State private var showTaskCheckIn = false
+    @State private var showAtomicHabits: Bool = false
+
+    var hasAtomicHabits: Bool {
+        task.cue != nil || task.cueTime != nil || task.attractiveness != nil ||
+        task.easeStrategy != nil || task.reward != nil
+    }
 
     var body: some View {
-        Button {
-            if isCompleted {
-                toggleCompletion()
-            } else {
-                showTaskCheckIn = true
-            }
-        } label: {
-            HStack(spacing: 16) {
-                // Completion indicator
-                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                    .font(.title2)
-                    .foregroundStyle(isCompleted ? .green : .gray.opacity(0.3))
-
-                // Task details
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(task.name)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-
-                    Text(task.frequency.displayText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    // Stats
-                    HStack(spacing: 12) {
-                        if task.currentStreak > 0 {
-                            HStack(spacing: 4) {
-                                Image(systemName: "flame.fill")
-                                    .font(.caption2)
-                                    .foregroundStyle(.orange)
-                                Text("\(task.currentStreak) day")
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                            }
-                        }
-
-                        HStack(spacing: 4) {
-                            Image(systemName: "chart.line.uptrend.xyaxis")
-                                .font(.caption2)
-                            Text("\(Int(task.completionRate * 100))%")
-                                .font(.caption)
-                        }
-                        .foregroundStyle(.secondary)
-                    }
+        VStack(spacing: 0) {
+            // Main task row
+            Button {
+                if isCompleted {
+                    toggleCompletion()
+                } else {
+                    showTaskCheckIn = true
                 }
+            } label: {
+                HStack(spacing: 16) {
+                    // Completion indicator
+                    Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                        .font(.title2)
+                        .foregroundStyle(isCompleted ? .green : .gray.opacity(0.3))
 
-                Spacer()
+                    // Task details
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(task.name)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+
+                        Text(task.frequency.displayText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        // Stats
+                        HStack(spacing: 12) {
+                            if task.currentStreak > 0 {
+                                HStack(spacing: 4) {
+                                    Image(systemName: "flame.fill")
+                                        .font(.caption2)
+                                        .foregroundStyle(.orange)
+                                    Text("\(task.currentStreak) day")
+                                        .font(.caption)
+                                        .foregroundStyle(.orange)
+                                }
+                            }
+
+                            HStack(spacing: 4) {
+                                Image(systemName: "chart.line.uptrend.xyaxis")
+                                    .font(.caption2)
+                                Text("\(Int(task.completionRate * 100))%")
+                                    .font(.caption)
+                            }
+                            .foregroundStyle(.secondary)
+                        }
+                    }
+
+                    Spacer()
+                }
+                .padding()
+            }
+            .buttonStyle(.plain)
+
+            // Atomic Habits section (if any fields are filled)
+            if hasAtomicHabits {
+                DisclosureGroup(isExpanded: $showAtomicHabits) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if let cue = task.cue {
+                            atomicHabitRow(
+                                icon: "eye",
+                                color: .blue,
+                                title: "Make it Obvious",
+                                content: cue
+                            )
+                        }
+
+                        if let cueTime = task.cueTime {
+                            atomicHabitRow(
+                                icon: "clock",
+                                color: .blue,
+                                title: "Cue Time",
+                                content: cueTime.formatted(date: .omitted, time: .shortened)
+                            )
+                        }
+
+                        if let attractiveness = task.attractiveness {
+                            atomicHabitRow(
+                                icon: "sparkles",
+                                color: .purple,
+                                title: "Make it Attractive",
+                                content: attractiveness
+                            )
+                        }
+
+                        if let easeStrategy = task.easeStrategy {
+                            atomicHabitRow(
+                                icon: "bolt",
+                                color: .green,
+                                title: "Make it Easy",
+                                content: easeStrategy
+                            )
+                        }
+
+                        if let reward = task.reward {
+                            atomicHabitRow(
+                                icon: "star",
+                                color: .orange,
+                                title: "Make it Satisfying",
+                                content: reward
+                            )
+                        }
+                    }
+                    .padding(.horizontal)
+                    .padding(.bottom, 12)
+                } label: {
+                    HStack {
+                        Label("The 4 Laws", systemImage: "book.closed")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 8)
+                    .background(Color(.systemGray5))
+                }
+                .tint(.secondary)
             }
         }
-        .buttonStyle(.plain)
-        .padding()
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .onAppear {
@@ -305,6 +381,26 @@ struct TaskDetailRow: View {
                 .onDisappear {
                     isCompleted = task.isCompletedToday()
                 }
+        }
+    }
+
+    private func atomicHabitRow(icon: String, color: Color, title: String, content: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: icon)
+                .font(.caption)
+                .foregroundStyle(color)
+                .frame(width: 20)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.caption2)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+
+                Text(content)
+                    .font(.caption)
+                    .foregroundStyle(.primary)
+            }
         }
     }
 

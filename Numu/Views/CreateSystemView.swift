@@ -235,6 +235,13 @@ struct CreateSystemView: View {
                 description: taskBuilder.description,
                 frequency: taskBuilder.frequency
             )
+            // Atomic Habits - The 4 Laws
+            task.cue = taskBuilder.cue
+            task.cueTime = taskBuilder.cueTime
+            task.attractiveness = taskBuilder.attractiveness
+            task.easeStrategy = taskBuilder.easeStrategy
+            task.reward = taskBuilder.reward
+
             task.system = system
             modelContext.insert(task)
         }
@@ -269,6 +276,13 @@ struct TaskBuilder: Identifiable {
     var name: String
     var description: String?
     var frequency: TaskFrequency
+
+    // Atomic Habits - The 4 Laws
+    var cue: String?
+    var cueTime: Date?
+    var attractiveness: String?
+    var easeStrategy: String?
+    var reward: String?
 }
 
 // MARK: - Test Builder
@@ -288,6 +302,15 @@ struct AddTaskSheet: View {
     @State private var taskName: String = ""
     @State private var taskDescription: String = ""
     @State private var selectedFrequency: TaskFrequency = .daily
+
+    // Atomic Habits - The 4 Laws
+    @State private var cue: String = ""
+    @State private var cueTime: Date = Date()
+    @State private var useCueTime: Bool = false
+    @State private var attractiveness: String = ""
+    @State private var easeStrategy: String = ""
+    @State private var reward: String = ""
+    @State private var showAtomicHabits: Bool = false
 
     let onAdd: (TaskBuilder) -> Void
 
@@ -311,6 +334,82 @@ struct AddTaskSheet: View {
                 } header: {
                     Text("Frequency")
                 }
+
+                // MARK: - Atomic Habits Section
+                Section {
+                    DisclosureGroup("The 4 Laws (Optional)", isExpanded: $showAtomicHabits) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            // Law 1: Make it Obvious
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("1st Law: Make it Obvious", systemImage: "eye")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.blue)
+
+                                TextField("When/where will you do this?", text: $cue, axis: .vertical)
+                                    .textFieldStyle(.roundedBorder)
+                                    .lineLimit(2...3)
+
+                                Toggle("Set specific time", isOn: $useCueTime)
+                                    .tint(.blue)
+
+                                if useCueTime {
+                                    DatePicker("Time", selection: $cueTime, displayedComponents: .hourAndMinute)
+                                }
+                            }
+                            .padding(.vertical, 8)
+
+                            Divider()
+
+                            // Law 2: Make it Attractive
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("2nd Law: Make it Attractive", systemImage: "sparkles")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.purple)
+
+                                TextField("How can you make this appealing?", text: $attractiveness, axis: .vertical)
+                                    .textFieldStyle(.roundedBorder)
+                                    .lineLimit(2...3)
+                            }
+                            .padding(.vertical, 8)
+
+                            Divider()
+
+                            // Law 3: Make it Easy
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("3rd Law: Make it Easy", systemImage: "bolt")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.green)
+
+                                TextField("2-minute version or strategy", text: $easeStrategy, axis: .vertical)
+                                    .textFieldStyle(.roundedBorder)
+                                    .lineLimit(2...3)
+                            }
+                            .padding(.vertical, 8)
+
+                            Divider()
+
+                            // Law 4: Make it Satisfying
+                            VStack(alignment: .leading, spacing: 8) {
+                                Label("4th Law: Make it Satisfying", systemImage: "star")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.orange)
+
+                                TextField("Immediate reward after completing", text: $reward, axis: .vertical)
+                                    .textFieldStyle(.roundedBorder)
+                                    .lineLimit(2...3)
+                            }
+                            .padding(.vertical, 8)
+                        }
+                    }
+                } header: {
+                    Text("Atomic Habits")
+                } footer: {
+                    Text("Apply James Clear's 4 Laws to make this habit stick. These are optional but powerful.")
+                }
             }
             .navigationTitle("Add Task")
             .navigationBarTitleDisplayMode(.inline)
@@ -326,7 +425,12 @@ struct AddTaskSheet: View {
                         let task = TaskBuilder(
                             name: taskName,
                             description: taskDescription.isEmpty ? nil : taskDescription,
-                            frequency: selectedFrequency
+                            frequency: selectedFrequency,
+                            cue: cue.isEmpty ? nil : cue,
+                            cueTime: useCueTime ? cueTime : nil,
+                            attractiveness: attractiveness.isEmpty ? nil : attractiveness,
+                            easeStrategy: easeStrategy.isEmpty ? nil : easeStrategy,
+                            reward: reward.isEmpty ? nil : reward
                         )
                         onAdd(task)
                         dismiss()
