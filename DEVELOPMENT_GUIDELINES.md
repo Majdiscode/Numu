@@ -69,6 +69,45 @@ When adding complex features or debugging broken code:
    - Clear commit messages: `[STAGE 1] Add models with optional relationships`
    - Easy to rollback if next stage breaks
 
+### 🛑 CRITICAL RULE: STOP AFTER EACH STAGE
+
+**⚠️ NEVER implement multiple stages without user testing in between!**
+
+**✅ CORRECT Workflow:**
+```
+1. Implement STAGE 1
+2. STOP → Tell user what to test
+3. Wait for user confirmation
+4. If works → Commit → Move to STAGE 2
+5. If fails → Fix STAGE 1 first
+```
+
+**❌ WRONG Workflow:**
+```
+1. Implement STAGE 1
+2. Immediately implement STAGE 2  ← NO!
+3. Tell user to test both          ← NO!
+```
+
+**Why This Matters:**
+- User needs to verify EACH change independently
+- If STAGE 2 breaks something, unclear if it's STAGE 1 or STAGE 2
+- Defeats entire purpose of staged approach
+- User explicitly requested this rule be enforced
+
+**Real Example (Atomic Habits Integration):**
+- ❌ **What NOT to do**: Implement AddTaskSheet fields (Stage 1) AND TaskDetailRow display (Stage 2) together
+- ✅ **What to do**: Implement AddTaskSheet fields (Stage 1) → STOP → User tests → Confirm it works → Then do TaskDetailRow display (Stage 2)
+
+**Exception:**
+Only combine stages if they are literally impossible to test separately (e.g., adding a model property requires UI to display it for testing). In this case, clearly explain why stages must be combined.
+
+**After implementing a stage:**
+1. Stop coding immediately
+2. Tell user: "STAGE X complete. Please test: [specific test steps]"
+3. Wait for user response
+4. Do NOT continue to next stage until user confirms
+
 ### Real Example: CloudKit Integration (Nov 2024)
 
 **Problem:** App wouldn't run after adding CloudKit sync
