@@ -614,6 +614,14 @@ struct TestEntryView: View {
     @State private var notes: String = ""
     @State private var conditions: String = ""
 
+    // Time-based input
+    @State private var minutes: Int = 0
+    @State private var seconds: Int = 0
+
+    var isTimeBased: Bool {
+        test.unit == "time"
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -630,20 +638,57 @@ struct TestEntryView: View {
                 }
 
                 Section {
-                    HStack {
-                        TextField("0.0", text: $value)
-                            .keyboardType(.decimalPad)
-                            .font(.system(size: 48, weight: .bold, design: .rounded))
-                            .multilineTextAlignment(.center)
+                    if isTimeBased {
+                        // Time input (MM:SS) - Apple-style wheel pickers
+                        HStack(spacing: 0) {
+                            // Minutes picker
+                            Picker("Minutes", selection: $minutes) {
+                                ForEach(0..<100) { minute in
+                                    Text("\(minute)").tag(minute)
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(maxWidth: .infinity)
 
-                        Text(test.unit)
-                            .font(.title2)
-                            .foregroundStyle(.secondary)
+                            Text("min")
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 8)
+
+                            // Seconds picker
+                            Picker("Seconds", selection: $seconds) {
+                                ForEach(0..<60) { second in
+                                    Text("\(second)").tag(second)
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(maxWidth: .infinity)
+
+                            Text("sec")
+                                .foregroundStyle(.secondary)
+                                .padding(.trailing, 8)
+                        }
+                        .labelsHidden()
+                    } else {
+                        // Regular numeric input
+                        HStack {
+                            TextField("0.0", text: $value)
+                                .keyboardType(.decimalPad)
+                                .font(.system(size: 48, weight: .bold, design: .rounded))
+                                .multilineTextAlignment(.center)
+
+                            Text(test.unit)
+                                .font(.title2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 } header: {
                     Text(test.name)
                 } footer: {
-                    Text(test.goalDirection.rawValue)
+                    if isTimeBased {
+                        Text("Scroll to select time. \(test.goalDirection.rawValue)")
+                    } else {
+                        Text(test.goalDirection.rawValue)
+                    }
                 }
 
                 Section {
@@ -709,17 +754,32 @@ struct TestEntryView: View {
     }
 
     private var isValid: Bool {
-        guard let doubleValue = Double(value), doubleValue > 0 else {
-            return false
+        if isTimeBased {
+            // For time-based tests, validate minutes and seconds
+            return minutes > 0 || seconds > 0  // At least one must be non-zero
+        } else {
+            // For regular tests, validate numeric input
+            guard let doubleValue = Double(value), doubleValue > 0 else {
+                return false
+            }
+            return true
         }
-        return true
     }
 
     private func saveEntry() {
-        guard let doubleValue = Double(value) else { return }
+        let finalValue: Double
+
+        if isTimeBased {
+            // Convert MM:SS to total seconds
+            finalValue = Double(minutes * 60 + seconds)
+        } else {
+            // Use the numeric value directly
+            guard let doubleValue = Double(value) else { return }
+            finalValue = doubleValue
+        }
 
         let entry = PerformanceTestEntry(
-            value: doubleValue,
+            value: finalValue,
             notes: notes.isEmpty ? nil : notes,
             conditions: conditions.isEmpty ? nil : conditions
         )

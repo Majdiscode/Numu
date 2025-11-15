@@ -64,35 +64,27 @@ struct CreateSystemView: View {
 
                 // MARK: - Daily Tasks
                 Section {
-                    if tasks.isEmpty {
-                        Text("No tasks yet")
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding()
-                            .listRowInsets(EdgeInsets())
-                    } else {
-                        ForEach(tasks) { task in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(task.name)
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
+                    ForEach(tasks) { task in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(task.name)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
 
-                                    Text(task.frequency.displayText)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
+                                Text(task.frequency.displayText)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+
+                            Spacer()
+
+                            Button(role: .destructive) {
+                                withAnimation {
+                                    tasks.removeAll { $0.id == task.id }
                                 }
-
-                                Spacer()
-
-                                Button(role: .destructive) {
-                                    withAnimation {
-                                        tasks.removeAll { $0.id == task.id }
-                                    }
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .foregroundStyle(.red)
-                                }
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.red)
                             }
                         }
                     }
@@ -100,7 +92,7 @@ struct CreateSystemView: View {
                     Button {
                         showAddTask = true
                     } label: {
-                        Label("Add Daily Task", systemImage: "plus.circle")
+                        Label(tasks.isEmpty ? "Add Your First Task" : "Add Daily Task", systemImage: "plus.circle")
                     }
                 } header: {
                     Label("Daily Tasks", systemImage: "checkmark.square")
@@ -110,39 +102,31 @@ struct CreateSystemView: View {
 
                 // MARK: - Periodic Tests
                 Section {
-                    if tests.isEmpty {
-                        Text("No tests yet")
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .padding()
-                            .listRowInsets(EdgeInsets())
-                    } else {
-                        ForEach(tests) { test in
-                            HStack {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(test.name)
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
+                    ForEach(tests) { test in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(test.name)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
 
-                                    HStack(spacing: 4) {
-                                        Text(test.frequency.displayText)
-                                        Text("•")
-                                        Text(test.unit)
-                                    }
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 4) {
+                                    Text(test.frequency.displayText)
+                                    Text("•")
+                                    Text(test.unit)
                                 }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            }
 
-                                Spacer()
+                            Spacer()
 
-                                Button(role: .destructive) {
-                                    withAnimation {
-                                        tests.removeAll { $0.id == test.id }
-                                    }
-                                } label: {
-                                    Image(systemName: "trash")
-                                        .foregroundStyle(.red)
+                            Button(role: .destructive) {
+                                withAnimation {
+                                    tests.removeAll { $0.id == test.id }
                                 }
+                            } label: {
+                                Image(systemName: "trash")
+                                    .foregroundStyle(.red)
                             }
                         }
                     }
@@ -150,7 +134,7 @@ struct CreateSystemView: View {
                     Button {
                         showAddTest = true
                     } label: {
-                        Label("Add Periodic Test", systemImage: "plus.circle")
+                        Label(tests.isEmpty ? "Add Your First Test" : "Add Periodic Test", systemImage: "plus.circle")
                     }
                 } header: {
                     Label("Periodic Tests", systemImage: "chart.bar")
@@ -285,6 +269,62 @@ struct TaskBuilder: Identifiable {
     var attractiveness: String?
     var easeStrategy: String?
     var reward: String?
+}
+
+// MARK: - Test Unit Enum
+enum TestUnit: String, CaseIterable, Identifiable {
+    // Time-based
+    case time = "Time (MM:SS)"
+    case minutes = "Minutes"
+    case seconds = "Seconds"
+    case hours = "Hours"
+
+    // Distance
+    case miles = "Miles"
+    case kilometers = "Kilometers"
+    case meters = "Meters"
+    case feet = "Feet"
+
+    // Weight
+    case pounds = "Pounds (lbs)"
+    case kilograms = "Kilograms (kg)"
+
+    // Reps/Count
+    case reps = "Reps"
+    case count = "Count"
+
+    // Percentage
+    case percentage = "Percentage (%)"
+
+    // Other
+    case calories = "Calories"
+    case heartRate = "BPM"
+
+    var id: String { rawValue }
+
+    var displayValue: String {
+        switch self {
+        case .time: return "time"
+        case .minutes: return "min"
+        case .seconds: return "sec"
+        case .hours: return "hr"
+        case .miles: return "mi"
+        case .kilometers: return "km"
+        case .meters: return "m"
+        case .feet: return "ft"
+        case .pounds: return "lbs"
+        case .kilograms: return "kg"
+        case .reps: return "reps"
+        case .count: return "count"
+        case .percentage: return "%"
+        case .calories: return "cal"
+        case .heartRate: return "bpm"
+        }
+    }
+
+    var isTimeBased: Bool {
+        self == .time
+    }
 }
 
 // MARK: - Test Builder
@@ -450,7 +490,7 @@ struct AddTestSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var testName: String = ""
-    @State private var testUnit: String = ""
+    @State private var selectedUnit: TestUnit = .time
     @State private var testDescription: String = ""
     @State private var goalDirection: TestGoalDirection = .higher
     @State private var frequency: TestFrequency = .biweekly
@@ -462,13 +502,19 @@ struct AddTestSheet: View {
             Form {
                 Section {
                     TextField("Test name", text: $testName)
-                    TextField("Unit", text: $testUnit)
+
+                    Picker("Unit", selection: $selectedUnit) {
+                        ForEach(TestUnit.allCases) { unit in
+                            Text(unit.rawValue).tag(unit)
+                        }
+                    }
+
                     TextField("Description (optional)", text: $testDescription, axis: .vertical)
                         .lineLimit(2...4)
                 } header: {
                     Text("Test Details")
                 } footer: {
-                    Text("Example: Mile time (minutes), Max pushups (reps)")
+                    Text("Select the unit for measuring this test")
                 }
 
                 Section {
@@ -505,7 +551,7 @@ struct AddTestSheet: View {
                     Button("Add") {
                         let test = TestBuilder(
                             name: testName,
-                            unit: testUnit,
+                            unit: selectedUnit.displayValue,
                             goalDirection: goalDirection,
                             frequency: frequency,
                             description: testDescription.isEmpty ? nil : testDescription
@@ -513,7 +559,7 @@ struct AddTestSheet: View {
                         onAdd(test)
                         dismiss()
                     }
-                    .disabled(testName.isEmpty || testUnit.isEmpty)
+                    .disabled(testName.isEmpty)
                     .fontWeight(.semibold)
                 }
             }
