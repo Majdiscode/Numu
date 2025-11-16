@@ -21,6 +21,13 @@ final class HabitTask {
     var name: String = ""  // e.g., "Run", "Read", "Meditate"
     var taskDescription: String?  // Optional description
 
+    // Habit type - positive (build) or negative (break)
+    private var habitTypeRaw: String = "positive"  // Stored as string for CloudKit
+    var habitType: HabitType {
+        get { HabitType(rawValue: habitTypeRaw) ?? .positive }
+        set { habitTypeRaw = newValue.rawValue }
+    }
+
     // Frequency control - stored as separate properties for SwiftData compatibility
     private var frequencyType: String = "daily"  // "daily", "weekdays", "weekends", "specificDays"
     private var frequencyDays: [Int] = []  // Used for specificDays case
@@ -76,6 +83,14 @@ final class HabitTask {
     var easeStrategy: String?  // 2-minute version
     var reward: String?  // Immediate satisfaction
 
+    // Time-based limits for negative habits (gradual reduction)
+    var hasTimeLimit: Bool = false  // Whether this habit uses time limits
+    var baselineLimit: Int = 0  // Starting limit in minutes (e.g., 120 min)
+    var targetLimit: Int = 0  // Goal limit in minutes (e.g., 15 min or 0)
+    var currentWeekLimit: Int = 0  // Current week's limit in minutes
+    var weekStartDate: Date?  // When current week started
+    var reductionPercentage: Double = 0.17  // Default 17% reduction per week
+
     // Relationship to parent System
     var system: System?
 
@@ -87,12 +102,25 @@ final class HabitTask {
     init(
         name: String,
         description: String? = nil,
-        frequency: TaskFrequency = .daily
+        frequency: TaskFrequency = .daily,
+        habitType: HabitType = .positive,
+        baselineLimit: Int? = nil,
+        targetLimit: Int? = nil
     ) {
         self.id = UUID()
         self.createdAt = Date()
         self.name = name
         self.taskDescription = description
+        self.habitTypeRaw = habitType.rawValue
+
+        // Set up time limits for negative habits
+        if let baseline = baselineLimit, let target = targetLimit {
+            self.hasTimeLimit = true
+            self.baselineLimit = baseline
+            self.targetLimit = target
+            self.currentWeekLimit = baseline
+            self.weekStartDate = Date()
+        }
 
         // Set frequency via the backing properties
         switch frequency {
@@ -212,6 +240,176 @@ final class HabitTask {
         }
 
         return max(longest, current)
+    }
+
+    // MARK: - Time Limit Management (Negative Habits)
+
+    /// Get today's total time spent on this habit
+    func todayTimeSpent() -> Int {
+        guard let logs = logs else { return 0 }
+        let today = Calendar.current.startOfDay(for: Date())
+        return logs
+            .filter { Calendar.current.isDate($0.date, inSameDayAs: today) }
+            .reduce(0) { $0 + ($1.minutesSpent ?? 0) }
+    }
+
+    /// Get remaining time allowance for today
+    func remainingTimeToday() -> Int {
+        guard hasTimeLimit else { return 0 }
+        let spent = todayTimeSpent()
+        return max(0, currentWeekLimit - spent)
+    }
+
+    /// Check if user stayed under limit today
+    func isUnderLimitToday() -> Bool {
+        guard hasTimeLimit else { return false }
+        return todayTimeSpent() <= currentWeekLimit
+    }
+
+    /// Get performance zone for given time spent
+    enum PerformanceZone {
+        case excellent  // Under goal (green)
+        case good       // Between goal and limit (yellow)
+        case overLimit  // Over limit (red)
+
+        var color: String {
+            switch self {
+            case .excellent: return "green"
+            case .good: return "yellow"
+            case .overLimit: return "red"
+            }
+        }
+
+        var displayText: String {
+            switch self {
+            case .excellent: return "Excellent! Under goal"
+            case .good: return "Good! Under limit"
+            case .overLimit: return "Over limit"
+            }
+        }
+
+        var emoji: String {
+            switch self {
+            case .excellent: return "🎉"
+            case .good: return "✅"
+            case .overLimit: return "⚠️"
+            }
+        }
+    }
+
+    /// Calculate performance zone based on minutes spent
+    func getPerformanceZone(minutesSpent: Int) -> PerformanceZone {
+        guard hasTimeLimit else { return .good }
+
+        if minutesSpent <= targetLimit {
+            return .excellent  // Beat the goal!
+        } else if minutesSpent <= currentWeekLimit {
+            return .good  // Under weekly limit
+        } else {
+            return .overLimit  // Over limit
+        }
+    }
+
+    /// Check if it's time to evaluate weekly progress and adjust limit
+    func shouldEvaluateWeek() -> Bool {
+        guard let weekStart = weekStartDate else { return false }
+        let daysSinceWeekStart = Calendar.current.dateComponents([.day], from: weekStart, to: Date()).day ?? 0
+        return daysSinceWeekStart >= 7
+    }
+
+    /// Evaluate this week's performance and adjust limit for next week
+    func evaluateAndAdjustWeeklyLimit() {
+        guard hasTimeLimit, shouldEvaluateWeek() else { return }
+
+        let successDays = countSuccessfulDaysThisWeek()
+        let needsToSucceed = 4 // Need 4 out of 7 days
+
+        if successDays >= needsToSucceed {
+            // Success! Reduce the limit for next week
+            let reduction = Double(currentWeekLimit) * reductionPercentage
+            let newLimit = Int(Double(currentWeekLimit) - reduction)
+
+            // Don't go below target
+            currentWeekLimit = max(newLimit, targetLimit)
+        }
+        // If failed, keep same limit for another week
+
+        // Reset week start date
+        weekStartDate = Date()
+    }
+
+    /// Count how many days this week the user stayed under limit
+    private func countSuccessfulDaysThisWeek() -> Int {
+        guard let logs = logs, let weekStart = weekStartDate else { return 0 }
+
+        var successCount = 0
+        let calendar = Calendar.current
+
+        // Check each of the last 7 days
+        for dayOffset in 0..<7 {
+            guard let checkDate = calendar.date(byAdding: .day, value: dayOffset, to: weekStart) else { continue }
+
+            let dayStart = calendar.startOfDay(for: checkDate)
+            let timeSpent = logs
+                .filter { calendar.isDate($0.date, inSameDayAs: dayStart) }
+                .reduce(0) { $0 + ($1.minutesSpent ?? 0) }
+
+            if timeSpent <= currentWeekLimit {
+                successCount += 1
+            }
+        }
+
+        return successCount
+    }
+
+    /// Get progress percentage for current week (0.0 to 1.0+)
+    func weekProgressPercentage() -> Double {
+        guard hasTimeLimit, currentWeekLimit > 0 else { return 0.0 }
+        let spent = todayTimeSpent()
+        return Double(spent) / Double(currentWeekLimit)
+    }
+
+    /// Format minutes to hours and minutes string
+    static func formatMinutes(_ minutes: Int) -> String {
+        if minutes < 60 {
+            return "\(minutes) min"
+        } else {
+            let hours = minutes / 60
+            let mins = minutes % 60
+            if mins == 0 {
+                return "\(hours) hr"
+            } else {
+                return "\(hours) hr \(mins) min"
+            }
+        }
+    }
+}
+
+// MARK: - Habit Type
+
+enum HabitType: String, Codable {
+    case positive  // Habits to build (e.g., "Run", "Read")
+    case negative  // Habits to break/avoid (e.g., "Scroll social media", "Eat junk food")
+
+    var displayName: String {
+        switch self {
+        case .positive: return "Build (Do More)"
+        case .negative: return "Break (Do Less)"
+        }
+    }
+
+    var completionVerb: String {
+        switch self {
+        case .positive: return "Completed"
+        case .negative: return "Avoided"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .positive: return "checkmark.circle.fill"
+        case .negative: return "xmark.circle.fill"
+        }
     }
 }
 

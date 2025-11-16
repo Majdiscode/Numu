@@ -15,9 +15,21 @@ struct SystemDetailView: View {
     let system: System
 
     @State private var showDeleteAlert = false
+    @State private var showEditSystem = false
+    @State private var isDeleted = false
 
     var body: some View {
-        ScrollView {
+        // Safety check: if system is deleted, show empty view and dismiss
+        if isDeleted {
+            return AnyView(
+                Color.clear
+                    .onAppear {
+                        dismiss()
+                    }
+            )
+        }
+
+        return AnyView(ScrollView {
             VStack(spacing: 24) {
                 // MARK: - System Header
                 systemHeader
@@ -38,6 +50,18 @@ struct SystemDetailView: View {
         }
         .navigationTitle(system.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showEditSystem = true
+                } label: {
+                    Text("Edit")
+                }
+            }
+        }
+        .sheet(isPresented: $showEditSystem) {
+            EditSystemView(system: system)
+        }
         .alert("Delete System?", isPresented: $showDeleteAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
@@ -45,7 +69,7 @@ struct SystemDetailView: View {
             }
         } message: {
             Text("This will permanently delete '\(system.name)' and all associated tasks, tests, and data. This action cannot be undone.")
-        }
+        })
     }
 
     // MARK: - System Header
@@ -195,12 +219,52 @@ struct SystemDetailView: View {
     }
 
     private func deleteSystem() {
+        // Defensive: Manually delete all tasks and their logs first
+        // This ensures deletion works regardless of when the system was created
+        if let tasks = system.tasks {
+            for task in tasks {
+                // Manually delete all logs for this task
+                if let logs = task.logs {
+                    for log in logs {
+                        modelContext.delete(log)
+                    }
+                }
+
+                // Delete the task itself
+                modelContext.delete(task)
+            }
+        }
+
+        // Defensive: Manually delete all tests and their entries first
+        if let tests = system.tests {
+            for test in tests {
+                // Manually delete all entries for this test
+                if let entries = test.entries {
+                    for entry in entries {
+                        modelContext.delete(entry)
+                    }
+                }
+
+                // Delete the test itself
+                modelContext.delete(test)
+            }
+        }
+
+        // Perform the delete on the system itself
         modelContext.delete(system)
+
         do {
             try modelContext.save()
-            dismiss()
+
+            // Mark as deleted BEFORE dismissing to prevent re-renders with deleted object
+            isDeleted = true
+
+            // Add a small delay to ensure state updates before dismiss
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                dismiss()
+            }
         } catch {
-            print("Error deleting system: \(error)")
+            print("❌ Error deleting system '\(system.name)': \(error.localizedDescription)")
         }
     }
 }
@@ -249,27 +313,41 @@ struct TaskDetailRow: View {
         task.easeStrategy != nil || task.reward != nil
     }
 
+    var isTimeBased: Bool {
+        task.habitType == .negative && task.hasTimeLimit
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Main task row
             Button {
-                if isCompleted {
-                    toggleCompletion()
-                } else {
-                    showTaskCheckIn = true
-                }
+                handleTaskTap()
             } label: {
                 HStack(spacing: 16) {
                     // Completion indicator
-                    Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                    let completionColor: Color = task.habitType == .positive ? .green : .orange
+                    Image(systemName: isCompleted ? task.habitType.icon : "circle")
                         .font(.title2)
-                        .foregroundStyle(isCompleted ? .green : .gray.opacity(0.3))
+                        .foregroundStyle(isCompleted ? completionColor : .gray.opacity(0.3))
 
                     // Task details
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(task.name)
-                            .font(.headline)
-                            .foregroundStyle(.primary)
+                        HStack(spacing: 6) {
+                            Text(task.name)
+                                .font(.headline)
+                                .foregroundStyle(.primary)
+
+                            if task.habitType == .negative {
+                                Text("Break")
+                                    .font(.caption2)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.orange)
+                                    .clipShape(Capsule())
+                            }
+                        }
 
                         Text(task.frequency.displayText)
                             .font(.caption)
@@ -404,6 +482,26 @@ struct TaskDetailRow: View {
         }
     }
 
+    private func handleTaskTap() {
+        if isTimeBased {
+            // Time-based negative habits MUST use check-in for time input
+            if isCompleted {
+                // Allow unchecking
+                toggleCompletion()
+            } else {
+                // Force check-in sheet
+                showTaskCheckIn = true
+            }
+        } else {
+            // Regular tasks
+            if isCompleted {
+                toggleCompletion()
+            } else {
+                showTaskCheckIn = true
+            }
+        }
+    }
+
     private func toggleCompletion() {
         withAnimation(.spring(response: 0.3)) {
             if isCompleted {
@@ -528,38 +626,151 @@ struct TaskCheckInView: View {
     @State private var notes: String = ""
     @State private var satisfaction: Int = 5
 
+    // For time-based negative habits
+    @State private var hoursSpent: Int = 0
+    @State private var minutesSpent: Int = 0
+
+    var isTimeBased: Bool {
+        task.habitType == .negative && task.hasTimeLimit
+    }
+
+    var totalMinutesSpent: Int {
+        (hoursSpent * 60) + minutesSpent
+    }
+
+    var remainingLimit: Int {
+        task.remainingTimeToday()
+    }
+
+    var performanceZone: HabitTask.PerformanceZone {
+        task.getPerformanceZone(minutesSpent: totalMinutesSpent)
+    }
+
+    var statusColor: Color {
+        switch performanceZone {
+        case .excellent: return .green
+        case .good: return .yellow
+        case .overLimit: return .red
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(task.name)
-                            .font(.headline)
+                        HStack(spacing: 8) {
+                            Text(task.name)
+                                .font(.headline)
 
-                        Text("Mark as completed for today")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                            if task.habitType == .negative {
+                                Text("Break")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.orange)
+                                    .clipShape(Capsule())
+                            }
+                        }
+
+                        if isTimeBased {
+                            Text("Log time spent today")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text(task.habitType == .positive ? "Mark as completed for today" : "Mark as avoided for today")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                     .padding(.vertical, 4)
                 }
 
-                Section {
-                    HStack(spacing: 12) {
-                        ForEach(1...5, id: \.self) { rating in
-                            Button {
-                                withAnimation(.spring(response: 0.3)) {
-                                    satisfaction = rating
+                // Time input for negative habits with limits
+                if isTimeBased {
+                    Section {
+                        HStack {
+                            Picker("Hours", selection: $hoursSpent) {
+                                ForEach(0..<24) { hour in
+                                    Text("\(hour)").tag(hour)
                                 }
-                            } label: {
-                                Text(emojiForRating(rating))
-                                    .font(.title2)
-                                    .opacity(satisfaction >= rating ? 1.0 : 0.3)
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(maxWidth: .infinity)
+
+                            Text("hr")
+                                .foregroundStyle(.secondary)
+
+                            Picker("Minutes", selection: $minutesSpent) {
+                                ForEach([0, 15, 30, 45], id: \.self) { minute in
+                                    Text("\(minute)").tag(minute)
+                                }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(maxWidth: .infinity)
+
+                            Text("min")
+                                .foregroundStyle(.secondary)
+                        }
+                        .labelsHidden()
+                    } header: {
+                        Text("Time Spent Today")
+                    } footer: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            // Current week limit
+                            HStack {
+                                Text("This week's limit:")
+                                    .foregroundStyle(.secondary)
+                                Text(HabitTask.formatMinutes(task.currentWeekLimit))
+                                    .fontWeight(.semibold)
+                            }
+                            .font(.caption)
+
+                            // Goal target
+                            HStack {
+                                Text("Goal target:")
+                                    .foregroundStyle(.secondary)
+                                Text(HabitTask.formatMinutes(task.targetLimit))
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.green)
+                            }
+                            .font(.caption)
+
+                            // Performance status
+                            if totalMinutesSpent > 0 {
+                                HStack(spacing: 6) {
+                                    Text(performanceZone.emoji)
+                                    Text(performanceZone.displayText)
+                                        .fontWeight(.semibold)
+                                        .foregroundStyle(statusColor)
+                                }
+                                .font(.caption)
+                                .padding(.top, 4)
                             }
                         }
                     }
-                    .frame(maxWidth: .infinity)
-                } header: {
-                    Text("How do you feel?")
+                } else {
+                    // Regular satisfaction picker for non-time-based habits
+                    Section {
+                        HStack(spacing: 12) {
+                            ForEach(1...5, id: \.self) { rating in
+                                Button {
+                                    withAnimation(.spring(response: 0.3)) {
+                                        satisfaction = rating
+                                    }
+                                } label: {
+                                    Text(emojiForRating(rating))
+                                        .font(.title2)
+                                        .opacity(satisfaction >= rating ? 1.0 : 0.3)
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    } header: {
+                        Text("How do you feel?")
+                    }
                 }
 
                 Section {
@@ -602,7 +813,8 @@ struct TaskCheckInView: View {
     private func completeTask() {
         let log = HabitTaskLog(
             notes: notes.isEmpty ? nil : notes,
-            satisfaction: satisfaction
+            satisfaction: isTimeBased ? nil : satisfaction,
+            minutesSpent: isTimeBased ? totalMinutesSpent : nil
         )
         log.task = task
 

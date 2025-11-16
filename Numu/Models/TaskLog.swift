@@ -21,18 +21,23 @@ final class HabitTaskLog {
     var notes: String?
     var satisfaction: Int?  // 1-5 scale
 
+    // For time-based negative habits
+    var minutesSpent: Int?  // Time spent on the habit (for negative habits with limits)
+
     // Relationship to parent HabitTask
     var task: HabitTask?
 
     init(
         date: Date = Date(),
         notes: String? = nil,
-        satisfaction: Int? = nil
+        satisfaction: Int? = nil,
+        minutesSpent: Int? = nil
     ) {
         self.id = UUID()
         self.date = Calendar.current.startOfDay(for: date)
         self.completedAt = Date()
         self.notes = notes
         self.satisfaction = satisfaction
+        self.minutesSpent = minutesSpent
     }
 }

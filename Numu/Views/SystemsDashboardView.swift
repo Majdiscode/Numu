@@ -55,6 +55,13 @@ struct SystemsDashboardView: View {
             }
             .navigationTitle("Systems")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    NavigationLink(destination: AnalyticsView()) {
+                        Image(systemName: "chart.line.uptrend.xyaxis")
+                            .font(.title3)
+                    }
+                }
+
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showCreateSystem = true
@@ -256,7 +263,19 @@ struct SystemCard: View {
     let modelContext: ModelContext
 
     var body: some View {
-        VStack(spacing: 16) {
+        // Defensive: Safely get tasks and tests
+        let todaysTasks: [HabitTask]
+        let dueTests: [PerformanceTest]
+
+        do {
+            todaysTasks = system.todaysTasks
+            dueTests = system.dueTests
+        } catch {
+            todaysTasks = []
+            dueTests = []
+        }
+
+        return VStack(spacing: 16) {
             // Header
             HStack(spacing: 12) {
                 ZStack {
@@ -281,33 +300,34 @@ struct SystemCard: View {
 
                 Spacer()
 
-                // Completion indicator
+                // Completion indicator - defensive calculation
+                let completionRate = (try? system.todayCompletionRate) ?? 0.0
                 ZStack {
                     Circle()
                         .stroke(Color.gray.opacity(0.2), lineWidth: 4)
                         .frame(width: 44, height: 44)
 
                     Circle()
-                        .trim(from: 0, to: system.todayCompletionRate)
+                        .trim(from: 0, to: max(0, min(1, completionRate)))
                         .stroke(Color(hex: system.color), lineWidth: 4)
                         .frame(width: 44, height: 44)
                         .rotationEffect(.degrees(-90))
 
-                    Text("\(Int(system.todayCompletionRate * 100))")
+                    Text("\(Int(max(0, min(100, completionRate * 100))))")
                         .font(.caption2)
                         .fontWeight(.bold)
                 }
             }
 
             // Tasks
-            if !system.todaysTasks.isEmpty {
+            if !todaysTasks.isEmpty {
                 VStack(spacing: 8) {
-                    ForEach(system.todaysTasks.prefix(3)) { task in
+                    ForEach(todaysTasks.prefix(3)) { task in
                         TaskRow(task: task, modelContext: modelContext)
                     }
 
-                    if system.todaysTasks.count > 3 {
-                        Text("+\(system.todaysTasks.count - 3) more tasks")
+                    if todaysTasks.count > 3 {
+                        Text("+\(todaysTasks.count - 3) more tasks")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -315,11 +335,11 @@ struct SystemCard: View {
             }
 
             // Due Tests
-            if !system.dueTests.isEmpty {
+            if !dueTests.isEmpty {
                 HStack {
                     Image(systemName: "checkmark.circle.badge.questionmark")
                         .foregroundStyle(.orange)
-                    Text("\(system.dueTests.count) test\(system.dueTests.count == 1 ? "" : "s") due")
+                    Text("\(dueTests.count) test\(dueTests.count == 1 ? "" : "s") due")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Spacer()
@@ -339,21 +359,40 @@ struct TaskRow: View {
     let modelContext: ModelContext
 
     @State private var isCompleted: Bool = false
+    @State private var showCheckIn: Bool = false
+
+    var isTimeBased: Bool {
+        task.habitType == .negative && task.hasTimeLimit
+    }
 
     var body: some View {
         HStack(spacing: 12) {
             Button {
-                toggleCompletion()
+                handleTaskTap()
             } label: {
-                Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
+                let completionColor: Color = task.habitType == .positive ? .green : .orange
+                Image(systemName: isCompleted ? task.habitType.icon : "circle")
                     .font(.title3)
-                    .foregroundStyle(isCompleted ? .green : .gray.opacity(0.3))
+                    .foregroundStyle(isCompleted ? completionColor : .gray.opacity(0.3))
             }
             .buttonStyle(.plain)
 
-            Text(task.name)
-                .font(.subheadline)
-                .foregroundStyle(isCompleted ? .secondary : .primary)
+            HStack(spacing: 6) {
+                Text(task.name)
+                    .font(.subheadline)
+                    .foregroundStyle(isCompleted ? .secondary : .primary)
+
+                if task.habitType == .negative {
+                    Text("Break")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.orange.opacity(0.8))
+                        .clipShape(Capsule())
+                }
+            }
 
             Spacer()
 
@@ -370,6 +409,28 @@ struct TaskRow: View {
         }
         .onAppear {
             isCompleted = task.isCompletedToday()
+        }
+        .sheet(isPresented: $showCheckIn) {
+            TaskCheckInView(task: task)
+                .onDisappear {
+                    isCompleted = task.isCompletedToday()
+                }
+        }
+    }
+
+    private func handleTaskTap() {
+        if isTimeBased {
+            // Time-based negative habits MUST use check-in for time input
+            if isCompleted {
+                // Allow unchecking by removing log
+                toggleCompletion()
+            } else {
+                // Force check-in sheet for time input
+                showCheckIn = true
+            }
+        } else {
+            // Regular tasks can quick toggle
+            toggleCompletion()
         }
     }
 

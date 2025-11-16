@@ -66,14 +66,26 @@ struct CreateSystemView: View {
                 Section {
                     ForEach(tasks) { task in
                         HStack {
+                            // Habit type indicator
+                            Image(systemName: task.habitType.icon)
+                                .foregroundStyle(task.habitType == .positive ? .green : .orange)
+                                .font(.title3)
+
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(task.name)
                                     .font(.subheadline)
                                     .fontWeight(.medium)
 
-                                Text(task.frequency.displayText)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                                HStack(spacing: 4) {
+                                    Text(task.habitType == .positive ? "Build" : "Break")
+                                        .font(.caption2)
+                                        .foregroundStyle(task.habitType == .positive ? .green : .orange)
+                                    Text("•")
+                                        .foregroundStyle(.secondary)
+                                    Text(task.frequency.displayText)
+                                }
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                             }
 
                             Spacer()
@@ -184,6 +196,7 @@ struct CreateSystemView: View {
                     }
                     .disabled(!isValid)
                     .fontWeight(.semibold)
+                    .buttonStyle(.borderedProminent)
                 }
             }
             .sheet(isPresented: $showAddTask) {
@@ -219,7 +232,10 @@ struct CreateSystemView: View {
             let task = HabitTask(
                 name: taskBuilder.name,
                 description: taskBuilder.description,
-                frequency: taskBuilder.frequency
+                frequency: taskBuilder.frequency,
+                habitType: taskBuilder.habitType,
+                baselineLimit: taskBuilder.baselineLimit,
+                targetLimit: taskBuilder.targetLimit
             )
             // Atomic Habits - The 4 Laws
             task.cue = taskBuilder.cue
@@ -262,6 +278,11 @@ struct TaskBuilder: Identifiable {
     var name: String
     var description: String?
     var frequency: TaskFrequency
+    var habitType: HabitType
+
+    // Time limits for negative habits
+    var baselineLimit: Int?  // Starting limit in minutes
+    var targetLimit: Int?  // Goal limit in minutes
 
     // Atomic Habits - The 4 Laws
     var cue: String?
@@ -344,6 +365,13 @@ struct AddTaskSheet: View {
     @State private var taskName: String = ""
     @State private var taskDescription: String = ""
     @State private var selectedFrequency: TaskFrequency = .daily
+    @State private var selectedHabitType: HabitType = .positive
+
+    // Time limits for negative habits
+    @State private var baselineHours: Int = 2
+    @State private var baselineMinutes: Int = 0
+    @State private var targetHours: Int = 0
+    @State private var targetMinutes: Int = 15
 
     // Atomic Habits - The 4 Laws
     @State private var cue: String = ""
@@ -368,6 +396,22 @@ struct AddTaskSheet: View {
                 }
 
                 Section {
+                    Picker("Type", selection: $selectedHabitType) {
+                        Text("Build (Do More)").tag(HabitType.positive)
+                        Text("Break (Do Less)").tag(HabitType.negative)
+                    }
+                    .pickerStyle(.segmented)
+                } header: {
+                    Text("Habit Type")
+                } footer: {
+                    if selectedHabitType == .positive {
+                        Text("Build good habits: things you want to do more of")
+                    } else {
+                        Text("Break bad habits: things you want to avoid or do less of")
+                    }
+                }
+
+                Section {
                     Picker("Frequency", selection: $selectedFrequency) {
                         Text("Every Day").tag(TaskFrequency.daily)
                         Text("Weekdays").tag(TaskFrequency.weekdays)
@@ -375,6 +419,87 @@ struct AddTaskSheet: View {
                     }
                 } header: {
                     Text("Frequency")
+                }
+
+                // MARK: - Time Limits (Negative Habits Only)
+                if selectedHabitType == .negative {
+                    Section {
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Set your gradual reduction plan")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+
+                            // Baseline limit
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Current Usage (per day)")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+
+                                HStack {
+                                    Picker("Hours", selection: $baselineHours) {
+                                        ForEach(0..<10) { hour in
+                                            Text("\(hour)").tag(hour)
+                                        }
+                                    }
+                                    .pickerStyle(.wheel)
+                                    .frame(maxWidth: .infinity)
+
+                                    Text("hr")
+                                        .foregroundStyle(.secondary)
+
+                                    Picker("Minutes", selection: $baselineMinutes) {
+                                        ForEach([0, 15, 30, 45], id: \.self) { minute in
+                                            Text("\(minute)").tag(minute)
+                                        }
+                                    }
+                                    .pickerStyle(.wheel)
+                                    .frame(maxWidth: .infinity)
+
+                                    Text("min")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .labelsHidden()
+                            }
+
+                            Divider()
+
+                            // Target limit
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Goal (per day)")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+
+                                HStack {
+                                    Picker("Hours", selection: $targetHours) {
+                                        ForEach(0..<10) { hour in
+                                            Text("\(hour)").tag(hour)
+                                        }
+                                    }
+                                    .pickerStyle(.wheel)
+                                    .frame(maxWidth: .infinity)
+
+                                    Text("hr")
+                                        .foregroundStyle(.secondary)
+
+                                    Picker("Minutes", selection: $targetMinutes) {
+                                        ForEach([0, 15, 30, 45], id: \.self) { minute in
+                                            Text("\(minute)").tag(minute)
+                                        }
+                                    }
+                                    .pickerStyle(.wheel)
+                                    .frame(maxWidth: .infinity)
+
+                                    Text("min")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .labelsHidden()
+                            }
+                        }
+                    } header: {
+                        Text("Time Limits")
+                    } footer: {
+                        Text("Your limit will gradually decrease each week. Need 4 successful days per week to progress.")
+                    }
                 }
 
                 // MARK: - Atomic Habits Section
@@ -464,10 +589,17 @@ struct AddTaskSheet: View {
 
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Add") {
+                        // Calculate total minutes for limits
+                        let baselineTotal = (baselineHours * 60) + baselineMinutes
+                        let targetTotal = (targetHours * 60) + targetMinutes
+
                         let task = TaskBuilder(
                             name: taskName,
                             description: taskDescription.isEmpty ? nil : taskDescription,
                             frequency: selectedFrequency,
+                            habitType: selectedHabitType,
+                            baselineLimit: selectedHabitType == .negative ? baselineTotal : nil,
+                            targetLimit: selectedHabitType == .negative ? targetTotal : nil,
                             cue: cue.isEmpty ? nil : cue,
                             cueTime: useCueTime ? cueTime : nil,
                             attractiveness: attractiveness.isEmpty ? nil : attractiveness,
@@ -479,6 +611,7 @@ struct AddTaskSheet: View {
                     }
                     .disabled(taskName.isEmpty)
                     .fontWeight(.semibold)
+                    .buttonStyle(.borderedProminent)
                 }
             }
         }
@@ -561,6 +694,7 @@ struct AddTestSheet: View {
                     }
                     .disabled(testName.isEmpty)
                     .fontWeight(.semibold)
+                    .buttonStyle(.borderedProminent)
                 }
             }
         }
