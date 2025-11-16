@@ -15,6 +15,11 @@ struct SystemsDashboardView: View {
     @State private var showCreateSystem = false
     @State private var cloudKitService = CloudKitService()
 
+    #if DEBUG
+    @State private var showDebugMenu = false
+    @State private var debugTapCount = 0
+    #endif
+
     var overallCompletionRate: Double {
         guard !systems.isEmpty else { return 0.0 }
 
@@ -70,15 +75,38 @@ struct SystemsDashboardView: View {
                             .font(.title2)
                     }
                 }
+
+                #if DEBUG
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        handleDebugTap()
+                    } label: {
+                        Image(systemName: "ant.circle")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                #endif
             }
             .sheet(isPresented: $showCreateSystem) {
                 CreateSystemView()
             }
+            #if DEBUG
+            .sheet(isPresented: $showDebugMenu) {
+                DebugMenuView()
+            }
+            #endif
             .onAppear {
                 cloudKitService.checkAccountStatus()
             }
         }
     }
+
+    #if DEBUG
+    private func handleDebugTap() {
+        showDebugMenu = true
+    }
+    #endif
 
     // MARK: - CloudKit Status Banner
     private var cloudKitStatusBanner: some View {
