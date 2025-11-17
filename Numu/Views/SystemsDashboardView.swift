@@ -187,13 +187,7 @@ struct SystemsDashboardView: View {
                         .fill(Color.gray.opacity(0.2))
 
                     RoundedRectangle(cornerRadius: 8)
-                        .fill(
-                            LinearGradient(
-                                colors: [.blue, .purple],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
+                        .fill(progressBarGradient)
                         .frame(width: geometry.size.width * overallCompletionRate)
                 }
             }
@@ -232,6 +226,28 @@ struct SystemsDashboardView: View {
         } else {
             return "Progress, not perfection. Keep showing up"
         }
+    }
+
+    // Dynamic color based on completion percentage
+    private var progressBarGradient: LinearGradient {
+        let colors: [Color]
+
+        if overallCompletionRate <= 0.25 {
+            // 0-25%: Blue
+            colors = [.blue, .blue]
+        } else if overallCompletionRate <= 0.5 {
+            // 25-50%: Blue to Cyan (light blue)
+            colors = [.blue, .cyan]
+        } else {
+            // 50-100%: Cyan to Pink/Purple
+            colors = [.cyan, .purple]
+        }
+
+        return LinearGradient(
+            colors: colors,
+            startPoint: .leading,
+            endPoint: .trailing
+        )
     }
 
     // MARK: - Systems List
