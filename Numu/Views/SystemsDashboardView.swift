@@ -219,13 +219,25 @@ struct SystemsDashboardView: View {
 
             // Progress Bar
             GeometryReader { geometry in
+                let filledWidth = geometry.size.width * overallCompletionRate
+
                 ZStack(alignment: .leading) {
+                    // Background
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.gray.opacity(0.2))
 
+                    // Full-width gradient layer
                     RoundedRectangle(cornerRadius: 8)
                         .fill(progressBarGradient)
-                        .frame(width: geometry.size.width * overallCompletionRate)
+                        .frame(width: geometry.size.width) // FULL width
+                        .mask(
+                            // Mask to only show the filled portion from the left (with rounded end)
+                            HStack(spacing: 0) {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .frame(width: filledWidth)
+                                Spacer(minLength: 0)
+                            }
+                        )
                 }
             }
             .frame(height: 12)
@@ -272,23 +284,16 @@ struct SystemsDashboardView: View {
         }
     }
 
-    // Dynamic color based on completion percentage
+    // Smooth gradient that flows from blue → cyan → purple → magenta as progress increases
     private var progressBarGradient: LinearGradient {
-        let colors: [Color]
-
-        if overallCompletionRate <= 0.25 {
-            // 0-25%: Blue
-            colors = [.blue, .blue]
-        } else if overallCompletionRate <= 0.5 {
-            // 25-50%: Blue to Cyan (light blue)
-            colors = [.blue, .cyan]
-        } else {
-            // 50-100%: Cyan to Pink/Purple
-            colors = [.cyan, .purple]
-        }
+        // Vibrant, saturated colors that avoid washing out to white
+        let brightBlue = Color(red: 0.2, green: 0.6, blue: 1.0)        // Electric blue
+        let brightCyan = Color(red: 0.0, green: 0.8, blue: 1.0)        // Vivid cyan
+        let brightPurple = Color(red: 0.7, green: 0.3, blue: 1.0)      // Bright purple (bridge color)
+        let brightMagenta = Color(red: 1.0, green: 0.2, blue: 0.9)     // Hot magenta/pink
 
         return LinearGradient(
-            colors: colors,
+            colors: [brightBlue, brightCyan, brightPurple, brightMagenta],
             startPoint: .leading,
             endPoint: .trailing
         )
