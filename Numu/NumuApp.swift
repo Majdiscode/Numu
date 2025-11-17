@@ -7,10 +7,12 @@
 
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 @main
 struct NumuApp: App {
     let modelContainer: ModelContainer
+    @State private var notificationManager = NotificationManager()
 
     init() {
         print("🚀 [NUMU] ========================================")
@@ -103,6 +105,13 @@ struct NumuApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environment(notificationManager)
+                .task {
+                    // Request notification permissions on first launch
+                    if notificationManager.authorizationStatus == .notDetermined {
+                        await notificationManager.requestAuthorization()
+                    }
+                }
         }
         .modelContainer(modelContainer)
     }

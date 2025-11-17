@@ -11,6 +11,7 @@ import SwiftData
 struct CreateSystemView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(NotificationManager.self) private var notificationManager
 
     // System details
     @State private var systemName: String = ""
@@ -228,6 +229,7 @@ struct CreateSystemView: View {
         )
 
         // Create tasks
+        var createdTasks: [HabitTask] = []
         for taskBuilder in tasks {
             let task = HabitTask(
                 name: taskBuilder.name,
@@ -246,9 +248,11 @@ struct CreateSystemView: View {
 
             task.system = system
             modelContext.insert(task)
+            createdTasks.append(task)
         }
 
         // Create tests
+        var createdTests: [PerformanceTest] = []
         for testBuilder in tests {
             let test = PerformanceTest(
                 name: testBuilder.name,
@@ -259,12 +263,24 @@ struct CreateSystemView: View {
             )
             test.system = system
             modelContext.insert(test)
+            createdTests.append(test)
         }
 
         modelContext.insert(system)
 
         do {
             try modelContext.save()
+
+            // Schedule notifications for tasks with cue times
+            for task in createdTasks where task.cueTime != nil {
+                notificationManager.scheduleTaskReminder(for: task)
+            }
+
+            // Schedule notifications for tests
+            for test in createdTests {
+                notificationManager.scheduleTestReminder(for: test)
+            }
+
             dismiss()
         } catch {
             print("Error saving system: \(error)")
