@@ -71,19 +71,37 @@ final class System {
 
     /// Overall system consistency since creation
     var overallConsistency: Double {
-        let daysSinceCreation = Calendar.current.dateComponents([.day], from: createdAt, to: Date()).day ?? 0
-        guard daysSinceCreation > 0 else { return 0.0 }
+        guard let tasks = tasks, !tasks.isEmpty else { return 0.0 }
 
-        let totalExpectedCompletions = (tasks ?? []).reduce(0) { total, task in
-            // Calculate how many times this task should have been completed
-            let taskDays = Calendar.current.dateComponents([.day], from: task.createdAt, to: Date()).day ?? 0
-            return total + max(0, taskDays + 1)
+        let calendar = Calendar.current
+        var totalExpected = 0
+        var totalCompleted = 0
+
+        for task in tasks {
+            // Calculate days between task creation and now
+            let taskStart = calendar.startOfDay(for: task.createdAt)
+            let now = calendar.startOfDay(for: Date())
+
+            guard let daysSince = calendar.dateComponents([.day], from: taskStart, to: now).day else { continue }
+
+            // Count how many days this task was DUE (based on frequency)
+            for dayOffset in 0...daysSince {
+                guard let date = calendar.date(byAdding: .day, value: dayOffset, to: taskStart) else { continue }
+
+                if task.shouldBeCompletedOn(date: date) {
+                    totalExpected += 1
+
+                    if task.wasCompletedOn(date: date) {
+                        totalCompleted += 1
+                    }
+                }
+            }
         }
 
-        guard totalExpectedCompletions > 0 else { return 0.0 }
+        guard totalExpected > 0 else { return 0.0 }
 
-        let totalActualCompletions = (tasks ?? []).reduce(0) { $0 + ($1.logs?.count ?? 0) }
-        return Double(totalActualCompletions) / Double(totalExpectedCompletions)
+        // Cap at 100% to prevent display issues
+        return min(1.0, Double(totalCompleted) / Double(totalExpected))
     }
 
     /// Current streak (consecutive days where all tasks were completed)

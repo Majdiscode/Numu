@@ -77,24 +77,14 @@ struct TestDataGenerator {
     func generateMultipleTestSystems() {
         print("🧪 [TEST DATA] Generating multiple test systems...")
 
-        // High performer (80-100% completion)
-        generateTestSystemWithPattern(
-            name: "🧪 High Performer",
-            category: .health,
-            completionRate: 0.9,
-            daysOfHistory: 30
-        )
+        // Hybrid Athlete (high performer)
+        generateHybridAthleteSystem()
 
-        // Average performer (50-70% completion)
-        generateTestSystemWithPattern(
-            name: "🧪 Average Performer",
-            category: .mind,
-            completionRate: 0.6,
-            daysOfHistory: 30
-        )
+        // Knowledge Worker (average performer)
+        generateKnowledgeWorkerSystem()
 
-        // Improving trend (starts low, ends high)
-        generateImprovingSystem()
+        // Healthy Lifestyle (improving trend)
+        generateHealthyLifestyleSystem()
 
         do {
             try modelContext.save()
@@ -220,13 +210,31 @@ struct TestDataGenerator {
                 modelContext.insert(log)
             }
         }
+
+        // Add performance test with realistic improvement
+        let test = PerformanceTest(
+            name: "🧪 Performance",
+            unit: "reps",
+            goalDirection: .higher,
+            trackingFrequency: .weekly,
+            description: "Test metric"
+        )
+        test.system = system
+        modelContext.insert(test)
+
+        // Generate test entries
+        generateTestEntries(for: test, weeks: max(1, daysOfHistory / 7))
     }
 
-    private func generateImprovingSystem() {
+    // MARK: - Realistic System Generators
+
+    private func generateHybridAthleteSystem() {
         let system = System(
-            name: "🧪 Improving Trend",
-            category: .learning,
-            description: "Test system showing improvement over time"
+            name: "🧪 Hybrid Athlete",
+            category: .athletics,
+            description: "Building strength and endurance",
+            color: "#FF6B35",
+            icon: "figure.run"
         )
 
         if let createdDate = Calendar.current.date(byAdding: .day, value: -30, to: Date()) {
@@ -235,26 +243,351 @@ struct TestDataGenerator {
 
         modelContext.insert(system)
 
-        let task = createTestTask(name: "🧪 Improving Task", frequency: .daily, system: system)
+        // Create realistic tasks
+        let tasks = [
+            createTestTask(name: "Morning Run", frequency: .daily, system: system),
+            createTestTask(name: "Strength Training", frequency: .specificDays([2, 4, 6]), system: system), // Mon, Wed, Fri
+            createTestTask(name: "Stretch & Mobility", frequency: .daily, system: system)
+        ]
 
-        // Start at 30% completion, gradually improve to 90%
+        // Generate high completion rate (85-95%)
+        generateTaskLogsWithRate(tasks: tasks, completionRate: 0.9, daysOfHistory: 30)
+
+        // Add performance tests
+        createMileTimeTest(system: system, improving: true)
+        createPushupsTest(system: system, improving: true)
+    }
+
+    private func generateKnowledgeWorkerSystem() {
+        let system = System(
+            name: "🧪 Knowledge Worker",
+            category: .learning,
+            description: "Continuous learning and deep work",
+            color: "#34C759",
+            icon: "book.fill"
+        )
+
+        if let createdDate = Calendar.current.date(byAdding: .day, value: -30, to: Date()) {
+            system.createdAt = createdDate
+        }
+
+        modelContext.insert(system)
+
+        // Create realistic tasks
+        let tasks = [
+            createTestTask(name: "Read 30 minutes", frequency: .daily, system: system),
+            createTestTask(name: "Write", frequency: .weekdays, system: system),
+            createTestTask(name: "Deep Work Block", frequency: .weekdays, system: system)
+        ]
+
+        // Generate average completion rate (60-70%)
+        generateTaskLogsWithRate(tasks: tasks, completionRate: 0.65, daysOfHistory: 30)
+
+        // Add performance tests
+        createPagesReadTest(system: system)
+        createWordsWrittenTest(system: system)
+    }
+
+    private func generateHealthyLifestyleSystem() {
+        let system = System(
+            name: "🧪 Healthy Lifestyle",
+            category: .health,
+            description: "Building healthy daily habits",
+            color: "#FF3B30",
+            icon: "heart.fill"
+        )
+
+        if let createdDate = Calendar.current.date(byAdding: .day, value: -30, to: Date()) {
+            system.createdAt = createdDate
+        }
+
+        modelContext.insert(system)
+
+        // Create realistic tasks
+        let tasks = [
+            createTestTask(name: "Drink 8 glasses of water", frequency: .daily, system: system),
+            createTestTask(name: "Sleep 8 hours", frequency: .daily, system: system),
+            createTestTask(name: "Healthy meal prep", frequency: .weekends, system: system)
+        ]
+
+        // Generate improving trend (starts 40%, ends 85%)
+        generateImprovingTaskLogs(tasks: tasks, startRate: 0.4, endRate: 0.85, daysOfHistory: 30)
+
+        // Add performance tests
+        createWeightTest(system: system)
+        createRestingHeartRateTest(system: system)
+    }
+
+    // MARK: - Task Log Generators
+
+    private func generateTaskLogsWithRate(tasks: [HabitTask], completionRate: Double, daysOfHistory: Int) {
         let calendar = Calendar.current
         let now = Date()
 
-        for dayOffset in (0..<30).reversed() {
+        for dayOffset in (0..<daysOfHistory).reversed() {
             guard let date = calendar.date(byAdding: .day, value: -dayOffset, to: now) else { continue }
             let startOfDay = calendar.startOfDay(for: date)
 
-            // Completion rate improves from 0.3 to 0.9 over 30 days
-            let progress = Double(30 - dayOffset) / 30.0
-            let completionRate = 0.3 + (progress * 0.6) // 30% to 90%
+            for task in tasks {
+                if task.shouldBeCompletedOn(date: startOfDay) {
+                    // Add some variance (±10%)
+                    let variance = Double.random(in: -0.1...0.1)
+                    let adjustedRate = min(1.0, max(0.0, completionRate + variance))
 
-            if Double.random(in: 0...1) < completionRate {
-                let log = HabitTaskLog()
-                log.task = task
-                log.date = startOfDay
-                modelContext.insert(log)
+                    if Double.random(in: 0...1) < adjustedRate {
+                        let log = HabitTaskLog(
+                            notes: nil,
+                            satisfaction: Int.random(in: 3...5),
+                            minutesSpent: nil
+                        )
+                        log.task = task
+                        log.date = startOfDay
+                        modelContext.insert(log)
+                    }
+                }
             }
+        }
+    }
+
+    private func generateImprovingTaskLogs(tasks: [HabitTask], startRate: Double, endRate: Double, daysOfHistory: Int) {
+        let calendar = Calendar.current
+        let now = Date()
+
+        for dayOffset in (0..<daysOfHistory).reversed() {
+            guard let date = calendar.date(byAdding: .day, value: -dayOffset, to: now) else { continue }
+            let startOfDay = calendar.startOfDay(for: date)
+
+            // Calculate progress-based completion rate
+            let progress = Double(daysOfHistory - dayOffset) / Double(daysOfHistory)
+            let completionRate = startRate + (progress * (endRate - startRate))
+
+            for task in tasks {
+                if task.shouldBeCompletedOn(date: startOfDay) {
+                    if Double.random(in: 0...1) < completionRate {
+                        let log = HabitTaskLog(
+                            notes: nil,
+                            satisfaction: Int.random(in: 3...5),
+                            minutesSpent: nil
+                        )
+                        log.task = task
+                        log.date = startOfDay
+                        modelContext.insert(log)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Performance Test Generators
+
+    private func createMileTimeTest(system: System, improving: Bool = true) {
+        let test = PerformanceTest(
+            name: "Mile Time",
+            unit: "time",
+            goalDirection: .lower,
+            trackingFrequency: .weekly,
+            description: "Measured on track"
+        )
+        test.system = system
+        modelContext.insert(test)
+
+        let calendar = Calendar.current
+        let now = Date()
+        let weeks = 4
+
+        var baseTime: Double = improving ? 540.0 : 480.0 // 9:00 or 8:00 in seconds
+
+        for weekOffset in (0..<weeks).reversed() {
+            guard let date = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: now) else { continue }
+
+            let improvement = improving ? Double(weeks - weekOffset) * 12.0 : 0.0
+            let variance = Double.random(in: -8...8)
+            let time = max(300, baseTime - improvement + variance) // Don't go below 5:00
+
+            let entry = PerformanceTestEntry(
+                value: time,
+                notes: "Morning run",
+                conditions: weekOffset % 2 == 0 ? "Good conditions" : "Felt strong"
+            )
+            entry.test = test
+            entry.date = date
+            modelContext.insert(entry)
+        }
+    }
+
+    private func createPushupsTest(system: System, improving: Bool = true) {
+        let test = PerformanceTest(
+            name: "Max Pushups",
+            unit: "reps",
+            goalDirection: .higher,
+            trackingFrequency: .weekly,
+            description: "One set to failure"
+        )
+        test.system = system
+        modelContext.insert(test)
+
+        let calendar = Calendar.current
+        let now = Date()
+        let weeks = 4
+
+        var baseReps: Double = improving ? 25.0 : 45.0
+
+        for weekOffset in (0..<weeks).reversed() {
+            guard let date = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: now) else { continue }
+
+            let improvement = improving ? Double(weeks - weekOffset) * 3.0 : 0.0
+            let variance = Double.random(in: -2...2)
+            let reps = baseReps + improvement + variance
+
+            let entry = PerformanceTestEntry(
+                value: reps,
+                notes: "After warmup",
+                conditions: weekOffset % 2 == 0 ? "Fresh" : "Good form"
+            )
+            entry.test = test
+            entry.date = date
+            modelContext.insert(entry)
+        }
+    }
+
+    private func createPagesReadTest(system: System) {
+        let test = PerformanceTest(
+            name: "Pages Read (Weekly)",
+            unit: "pages",
+            goalDirection: .higher,
+            trackingFrequency: .weekly,
+            description: "Total pages per week"
+        )
+        test.system = system
+        modelContext.insert(test)
+
+        let calendar = Calendar.current
+        let now = Date()
+        let weeks = 4
+
+        for weekOffset in (0..<weeks).reversed() {
+            guard let date = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: now) else { continue }
+
+            let basePages = 80.0
+            let variance = Double.random(in: -15...20)
+            let pages = basePages + variance
+
+            let entry = PerformanceTestEntry(
+                value: pages,
+                notes: "Mix of fiction and non-fiction",
+                conditions: nil
+            )
+            entry.test = test
+            entry.date = date
+            modelContext.insert(entry)
+        }
+    }
+
+    private func createWordsWrittenTest(system: System) {
+        let test = PerformanceTest(
+            name: "Words Written (Weekly)",
+            unit: "words",
+            goalDirection: .higher,
+            trackingFrequency: .weekly,
+            description: "Blog posts and notes"
+        )
+        test.system = system
+        modelContext.insert(test)
+
+        let calendar = Calendar.current
+        let now = Date()
+        let weeks = 4
+
+        var baseWords = 1200.0
+
+        for weekOffset in (0..<weeks).reversed() {
+            guard let date = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: now) else { continue }
+
+            // Slight improvement over time
+            let improvement = Double(weeks - weekOffset) * 150.0
+            let variance = Double.random(in: -200...300)
+            let words = baseWords + improvement + variance
+
+            let entry = PerformanceTestEntry(
+                value: words,
+                notes: "Writing sessions",
+                conditions: nil
+            )
+            entry.test = test
+            entry.date = date
+            modelContext.insert(entry)
+        }
+    }
+
+    private func createWeightTest(system: System) {
+        let test = PerformanceTest(
+            name: "Weight",
+            unit: "lbs",
+            goalDirection: .lower,
+            trackingFrequency: .weekly,
+            description: "Morning weigh-in"
+        )
+        test.system = system
+        modelContext.insert(test)
+
+        let calendar = Calendar.current
+        let now = Date()
+        let weeks = 4
+
+        var baseWeight = 180.0
+
+        for weekOffset in (0..<weeks).reversed() {
+            guard let date = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: now) else { continue }
+
+            // Gradual weight loss
+            let improvement = Double(weeks - weekOffset) * 1.5
+            let variance = Double.random(in: -0.5...0.5)
+            let weight = baseWeight - improvement + variance
+
+            let entry = PerformanceTestEntry(
+                value: weight,
+                notes: "After waking up",
+                conditions: nil
+            )
+            entry.test = test
+            entry.date = date
+            modelContext.insert(entry)
+        }
+    }
+
+    private func createRestingHeartRateTest(system: System) {
+        let test = PerformanceTest(
+            name: "Resting Heart Rate",
+            unit: "bpm",
+            goalDirection: .lower,
+            trackingFrequency: .weekly,
+            description: "Morning measurement"
+        )
+        test.system = system
+        modelContext.insert(test)
+
+        let calendar = Calendar.current
+        let now = Date()
+        let weeks = 4
+
+        var baseHR = 72.0
+
+        for weekOffset in (0..<weeks).reversed() {
+            guard let date = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: now) else { continue }
+
+            // Improving cardiovascular health
+            let improvement = Double(weeks - weekOffset) * 2.0
+            let variance = Double.random(in: -1...1)
+            let hr = baseHR - improvement + variance
+
+            let entry = PerformanceTestEntry(
+                value: hr,
+                notes: "Using watch",
+                conditions: "After 5 min rest"
+            )
+            entry.test = test
+            entry.date = date
+            modelContext.insert(entry)
         }
     }
 

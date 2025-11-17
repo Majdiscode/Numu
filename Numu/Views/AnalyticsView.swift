@@ -22,14 +22,11 @@ struct AnalyticsView: View {
                     // MARK: - Overview Stats
                     overviewStats
 
-                    // MARK: - Completion Chart Section
-                    completionChartSection
+                    // MARK: - Per-System Analytics
+                    perSystemAnalytics
 
-                    // MARK: - Test Performance Section
-                    testPerformanceSection
-
-                    // MARK: - Streak Section
-                    streakSection
+                    // MARK: - Overall Trends
+                    overallTrendsSection
                 }
                 .padding()
             }
@@ -70,11 +67,47 @@ struct AnalyticsView: View {
         }
     }
 
-    // MARK: - Completion Chart Section
-    private var completionChartSection: some View {
+    // MARK: - Per-System Analytics
+    private var perSystemAnalytics: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Systems")
+                .font(.title2)
+                .fontWeight(.bold)
+
+            if systems.isEmpty {
+                // Empty state
+                VStack(spacing: 12) {
+                    Image(systemName: "gearshape.2")
+                        .font(.system(size: 40))
+                        .foregroundStyle(.secondary)
+
+                    Text("No systems yet")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Text("Create a system to track tasks and tests")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+                .padding()
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
+            } else {
+                ForEach(systems) { system in
+                    SystemAnalyticsCard(system: system, selectedTimeRange: $selectedTimeRange)
+                }
+            }
+        }
+    }
+
+    // MARK: - Overall Trends Section
+    private var overallTrendsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Completion Trend")
+                Text("Overall Completion Trend")
                     .font(.title2)
                     .fontWeight(.bold)
 
@@ -207,50 +240,6 @@ struct AnalyticsView: View {
         }
     }
 
-    // MARK: - Test Performance Section (Placeholder)
-    private var testPerformanceSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Test Performance")
-                .font(.title2)
-                .fontWeight(.bold)
-
-            VStack(spacing: 16) {
-                Text("Test Charts Coming in Stage 3")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 60)
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color(.systemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
-        }
-    }
-
-    // MARK: - Streak Section (Placeholder)
-    private var streakSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Streaks & Consistency")
-                .font(.title2)
-                .fontWeight(.bold)
-
-            VStack(spacing: 16) {
-                Text("Streak Visualization Coming in Stage 4")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 60)
-            }
-            .frame(maxWidth: .infinity)
-            .padding()
-            .background(Color(.systemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 16))
-            .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
-        }
-    }
-
     // MARK: - Computed Properties
     private var totalActiveTasks: Int {
         systems.reduce(0) { $0 + ($1.tasks?.count ?? 0) }
@@ -260,9 +249,9 @@ struct AnalyticsView: View {
         systems.reduce(0) { $0 + ($1.tests?.count ?? 0) }
     }
 
-    // MARK: - Completion Data
+    // MARK: - Completion Data (Overall)
 
-    /// Calculate daily completion rates for the selected time range
+    /// Calculate daily completion rates for the selected time range (across ALL systems)
     private var completionData: [CompletionDataPoint] {
         let calendar = Calendar.current
         let now = Date()
@@ -337,6 +326,288 @@ struct AnalyticsView: View {
     }
 }
 
+// MARK: - System Analytics Card
+struct SystemAnalyticsCard: View {
+    let system: System
+    @Binding var selectedTimeRange: TimeRange
+
+    @State private var isExpanded: Bool = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Header (always visible)
+            Button {
+                withAnimation(.spring(response: 0.3)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    // System icon
+                    ZStack {
+                        Circle()
+                            .fill(Color(hex: system.color).opacity(0.15))
+                            .frame(width: 44, height: 44)
+
+                        Image(systemName: system.icon)
+                            .font(.title3)
+                            .foregroundStyle(Color(hex: system.color))
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(system.name)
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+
+                        HStack(spacing: 12) {
+                            Label("\(system.tasks?.count ?? 0) tasks", systemImage: "checkmark.circle")
+                            Label("\(system.tests?.count ?? 0) tests", systemImage: "chart.bar")
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+
+                    // Expand/collapse indicator
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+                .padding()
+            }
+            .buttonStyle(.plain)
+
+            // Expanded content
+            if isExpanded {
+                VStack(spacing: 20) {
+                    Divider()
+
+                    // System completion chart
+                    SystemCompletionChart(system: system, timeRange: selectedTimeRange)
+                        .padding(.horizontal)
+
+                    // Individual task charts/stats
+                    if let tasks = system.tasks, !tasks.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Tasks")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .padding(.horizontal)
+
+                            ForEach(tasks) { task in
+                                TaskAnalyticsRow(task: task, timeRange: selectedTimeRange)
+                                    .padding(.horizontal)
+                            }
+                        }
+                    }
+
+                    // Individual test charts
+                    if let tests = system.tests, !tests.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("Tests")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .padding(.horizontal)
+
+                            ForEach(tests) { test in
+                                TestPerformanceCard(test: test)
+                                    .padding(.horizontal)
+                            }
+                        }
+                    }
+                }
+                .padding(.bottom, 16)
+            }
+        }
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
+    }
+}
+
+// MARK: - System Completion Chart
+struct SystemCompletionChart: View {
+    let system: System
+    let timeRange: TimeRange
+
+    private var completionData: [CompletionDataPoint] {
+        let calendar = Calendar.current
+        let now = Date()
+        let daysToShow = timeRange.days
+
+        var dataPoints: [CompletionDataPoint] = []
+
+        for dayOffset in (0..<daysToShow).reversed() {
+            guard let date = calendar.date(byAdding: .day, value: -dayOffset, to: now) else { continue }
+            let startOfDay = calendar.startOfDay(for: date)
+
+            guard let tasks = system.tasks else { continue }
+
+            var tasksDue = 0
+            var tasksCompleted = 0
+
+            for task in tasks {
+                if task.shouldBeCompletedOn(date: startOfDay) {
+                    tasksDue += 1
+                    if task.wasCompletedOn(date: startOfDay) {
+                        tasksCompleted += 1
+                    }
+                }
+            }
+
+            if tasksDue > 0 {
+                let rate = Double(tasksCompleted) / Double(tasksDue)
+                dataPoints.append(CompletionDataPoint(date: startOfDay, completionRate: rate))
+            }
+        }
+
+        return dataPoints
+    }
+
+    private var averageCompletion: Double {
+        guard !completionData.isEmpty else { return 0.0 }
+        return completionData.reduce(0.0) { $0 + $1.completionRate } / Double(completionData.count)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("System Completion")
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+
+                Spacer()
+
+                Text("\(Int(averageCompletion * 100))% avg")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if completionData.isEmpty {
+                Text("No task completion data for this period")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 20)
+            } else {
+                Chart(completionData) { dataPoint in
+                    LineMark(
+                        x: .value("Date", dataPoint.date),
+                        y: .value("Completion", dataPoint.completionRate * 100)
+                    )
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(Color(hex: system.color))
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round))
+
+                    AreaMark(
+                        x: .value("Date", dataPoint.date),
+                        y: .value("Completion", dataPoint.completionRate * 100)
+                    )
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(Color(hex: system.color).opacity(0.2))
+                }
+                .chartYScale(domain: 0...100)
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisValueLabel {
+                            if let intValue = value.as(Int.self) {
+                                Text("\(intValue)%")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        AxisGridLine()
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks { value in
+                        AxisValueLabel(format: .dateTime.month().day())
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .frame(height: 120)
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// MARK: - Task Analytics Row
+struct TaskAnalyticsRow: View {
+    let task: HabitTask
+    let timeRange: TimeRange
+
+    private var completionStats: (completed: Int, due: Int, rate: Double) {
+        let calendar = Calendar.current
+        let now = Date()
+        let daysToShow = timeRange.days
+
+        var tasksDue = 0
+        var tasksCompleted = 0
+
+        for dayOffset in 0..<daysToShow {
+            guard let date = calendar.date(byAdding: .day, value: -dayOffset, to: now) else { continue }
+            let startOfDay = calendar.startOfDay(for: date)
+
+            if task.shouldBeCompletedOn(date: startOfDay) {
+                tasksDue += 1
+                if task.wasCompletedOn(date: startOfDay) {
+                    tasksCompleted += 1
+                }
+            }
+        }
+
+        let rate = tasksDue > 0 ? Double(tasksCompleted) / Double(tasksDue) : 0.0
+        return (tasksCompleted, tasksDue, rate)
+    }
+
+    private var completionRate: Double {
+        completionStats.rate
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(task.name)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+
+                HStack(spacing: 8) {
+                    Label(task.frequency.displayText, systemImage: "calendar")
+
+                    if task.currentStreak > 0 {
+                        Label("\(task.currentStreak) day", systemImage: "flame.fill")
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            // Completion rate
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(completionStats.completed)/\(completionStats.due)")
+                    .font(.headline)
+                    .foregroundStyle(completionRate >= 0.8 ? .green : completionRate >= 0.5 ? .orange : .red)
+
+                Text("\(Int(completionRate * 100))% consistency")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
 // MARK: - Supporting Types
 
 struct CompletionDataPoint: Identifiable {
@@ -395,6 +666,165 @@ enum TrendDirection {
         case .declining: return .orange
         }
     }
+}
+
+// MARK: - Test Performance Card
+struct TestPerformanceCard: View {
+    let test: PerformanceTest
+
+    var testData: [PerformanceTestDataPoint] {
+        guard let entries = test.entries, !entries.isEmpty else { return [] }
+
+        return entries
+            .sorted { $0.date < $1.date }
+            .map { entry in
+                PerformanceTestDataPoint(date: entry.date, value: entry.value)
+            }
+    }
+
+    var systemConsistency: Double {
+        test.system?.overallConsistency ?? 0.0
+    }
+
+    var analytics: PerformanceTestAnalytics {
+        test.getAnalytics(systemConsistency: systemConsistency)
+    }
+
+    // Helper to format time values (seconds -> MM:SS)
+    private func formatTimeValue(_ seconds: Double) -> String {
+        let totalSeconds = Int(seconds)
+        let minutes = totalSeconds / 60
+        let remainingSeconds = totalSeconds % 60
+        return "\(minutes):\(String(format: "%02d", remainingSeconds))"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // Header
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(test.name)
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+
+                    Text(test.trackingFrequency.displayText)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                // Latest value
+                if let latest = analytics.latestValue {
+                    VStack(alignment: .trailing, spacing: 2) {
+                        if test.unit == "time" {
+                            Text(formatTimeValue(latest))
+                                .font(.title3)
+                                .fontWeight(.bold)
+                        } else {
+                            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                                Text(String(format: "%.1f", latest))
+                                    .font(.title3)
+                                    .fontWeight(.bold)
+                                Text(test.unit)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        Text("Latest")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            if testData.isEmpty {
+                // Empty state
+                Text("No entries yet")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 20)
+            } else {
+                // Chart
+                Chart(testData) { dataPoint in
+                    LineMark(
+                        x: .value("Date", dataPoint.date),
+                        y: .value(test.unit, dataPoint.value)
+                    )
+                    .interpolationMethod(.monotone)
+                    .foregroundStyle(.purple)
+                    .lineStyle(StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+
+                    PointMark(
+                        x: .value("Date", dataPoint.date),
+                        y: .value(test.unit, dataPoint.value)
+                    )
+                    .foregroundStyle(.purple)
+                }
+                .chartXAxis {
+                    AxisMarks { value in
+                        AxisValueLabel(format: .dateTime.month().day())
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(position: .leading) { value in
+                        AxisValueLabel()
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                        AxisGridLine()
+                    }
+                }
+                .frame(height: 120)
+
+                // Stats
+                HStack(spacing: 16) {
+                    if let improvement = analytics.improvement {
+                        // Determine if improvement is positive based on goal direction
+                        let isImproving: Bool = {
+                            switch test.goalDirection {
+                            case .higher:
+                                return improvement > 0  // Higher is better, so positive change is good
+                            case .lower:
+                                return improvement < 0  // Lower is better, so negative change is good
+                            }
+                        }()
+
+                        HStack(spacing: 4) {
+                            Image(systemName: improvement > 0 ? "arrow.up" : "arrow.down")
+                                .font(.caption2)
+                            Text(String(format: "%.1f%%", abs(improvement)))
+                                .font(.caption)
+                                .fontWeight(.semibold)
+                        }
+                        .foregroundStyle(isImproving ? .green : .red)
+                    }
+
+                    Spacer()
+                }
+
+                // Insight message
+                if testData.count >= 3 {
+                    Text(analytics.consistencyCorrelation)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .italic()
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+struct PerformanceTestDataPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let value: Double
 }
 
 // MARK: - Stat Card Component

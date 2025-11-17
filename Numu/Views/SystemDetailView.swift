@@ -588,12 +588,22 @@ struct TestCard: View {
                         Spacer()
 
                         if let improvement = analytics.improvement {
+                            // Determine if improvement is positive based on goal direction
+                            let isImproving: Bool = {
+                                switch test.goalDirection {
+                                case .higher:
+                                    return improvement > 0  // Higher is better, so positive change is good
+                                case .lower:
+                                    return improvement < 0  // Lower is better, so negative change is good
+                                }
+                            }()
+
                             HStack(spacing: 4) {
                                 Image(systemName: improvement > 0 ? "arrow.up" : "arrow.down")
                                 Text(String(format: "%.1f%%", abs(improvement)))
                             }
                             .font(.caption)
-                            .foregroundStyle(improvement > 0 ? .green : .red)
+                            .foregroundStyle(isImproving ? .green : .red)
                         }
                     }
                 }
