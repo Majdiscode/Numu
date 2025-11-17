@@ -84,20 +84,35 @@ class NotificationManager {
             let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
             scheduleNotification(identifier: "task-\(task.id)", content: content, trigger: trigger)
 
-        case .weekly(let days):
+        case .weekdays:
+            // Monday through Friday (2-6)
+            for weekday in 2...6 {
+                var dayComponents = components
+                dayComponents.weekday = weekday
+
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dayComponents, repeats: true)
+                scheduleNotification(identifier: "task-\(task.id)-\(weekday)", content: content, trigger: trigger)
+            }
+
+        case .weekends:
+            // Saturday and Sunday (1, 7)
+            for weekday in [1, 7] {
+                var dayComponents = components
+                dayComponents.weekday = weekday
+
+                let trigger = UNCalendarNotificationTrigger(dateMatching: dayComponents, repeats: true)
+                scheduleNotification(identifier: "task-\(task.id)-\(weekday)", content: content, trigger: trigger)
+            }
+
+        case .specificDays(let days):
             // On specific days of the week
             for day in days {
                 var dayComponents = components
-                dayComponents.weekday = day.rawValue
+                dayComponents.weekday = day
 
                 let trigger = UNCalendarNotificationTrigger(dateMatching: dayComponents, repeats: true)
-                scheduleNotification(identifier: "task-\(task.id)-\(day.rawValue)", content: content, trigger: trigger)
+                scheduleNotification(identifier: "task-\(task.id)-\(day)", content: content, trigger: trigger)
             }
-
-        case .custom(let frequencyDays):
-            // For custom frequencies, schedule daily and let app logic handle skipping
-            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-            scheduleNotification(identifier: "task-\(task.id)", content: content, trigger: trigger)
         }
 
         print("✅ Scheduled reminder for '\(task.name)' at \(cueTime.formatted(date: .omitted, time: .shortened))")
@@ -113,11 +128,22 @@ class NotificationManager {
     private func getPendingIdentifiers(for task: HabitTask) -> [String] {
         var identifiers = ["task-\(task.id)"]
 
-        // Add weekday-specific identifiers for weekly tasks
-        if case .weekly(let days) = task.frequency {
-            for day in days {
-                identifiers.append("task-\(task.id)-\(day.rawValue)")
+        // Add weekday-specific identifiers
+        switch task.frequency {
+        case .weekdays:
+            for weekday in 2...6 {
+                identifiers.append("task-\(task.id)-\(weekday)")
             }
+        case .weekends:
+            for weekday in [1, 7] {
+                identifiers.append("task-\(task.id)-\(weekday)")
+            }
+        case .specificDays(let days):
+            for day in days {
+                identifiers.append("task-\(task.id)-\(day)")
+            }
+        case .daily:
+            break // Already have the base identifier
         }
 
         return identifiers

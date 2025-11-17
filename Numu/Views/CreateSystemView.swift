@@ -11,7 +11,6 @@ import SwiftData
 struct CreateSystemView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Environment(NotificationManager.self) private var notificationManager
 
     // System details
     @State private var systemName: String = ""
@@ -26,21 +25,14 @@ struct CreateSystemView: View {
     @State private var tests: [TestBuilder] = []
     @State private var showAddTest = false
 
+    // Callback for scheduling notifications
+    var onSystemCreated: ((System) -> Void)?
+
     var body: some View {
         NavigationStack {
             Form {
                 // MARK: - System Identity
                 Section {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("What system do you want to build?")
-                            .font(.headline)
-
-                        Text("Examples: Hybrid Athlete, Consistent Reader, Creative Professional")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 4)
-
                     TextField("System name", text: $systemName)
                         .textFieldStyle(.plain)
 
@@ -48,45 +40,32 @@ struct CreateSystemView: View {
                         .textFieldStyle(.plain)
                         .lineLimit(2...4)
                 } header: {
-                    Label("System Identity", systemImage: "gearshape.2")
+                    Text("System Identity")
+                } footer: {
+                    Text("Examples: Hybrid Athlete, Consistent Reader, Creative Professional")
                 }
 
                 // MARK: - Category
-                Section {
+                Section("Category") {
                     Picker("Category", selection: $selectedCategory) {
                         ForEach(SystemCategory.allCases, id: \.self) { category in
-                            Label(category.rawValue, systemImage: category.systemIcon)
-                                .tag(category)
+                            Text(category.rawValue).tag(category)
                         }
                     }
-                } header: {
-                    Label("Category", systemImage: "folder")
                 }
 
                 // MARK: - Daily Tasks
                 Section {
                     ForEach(tasks) { task in
                         HStack {
-                            // Habit type indicator
-                            Image(systemName: task.habitType.icon)
-                                .foregroundStyle(task.habitType == .positive ? .green : .orange)
-                                .font(.title3)
-
                             VStack(alignment: .leading, spacing: 4) {
                                 Text(task.name)
                                     .font(.subheadline)
                                     .fontWeight(.medium)
 
-                                HStack(spacing: 4) {
-                                    Text(task.habitType == .positive ? "Build" : "Break")
-                                        .font(.caption2)
-                                        .foregroundStyle(task.habitType == .positive ? .green : .orange)
-                                    Text("•")
-                                        .foregroundStyle(.secondary)
-                                    Text(task.frequency.displayText)
-                                }
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                Text(task.frequency.displayText)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
 
                             Spacer()
@@ -105,12 +84,12 @@ struct CreateSystemView: View {
                     Button {
                         showAddTask = true
                     } label: {
-                        Label(tasks.isEmpty ? "Add Your First Task" : "Add Daily Task", systemImage: "plus.circle")
+                        Label(tasks.isEmpty ? "Add Your First Task" : "Add Task", systemImage: "plus.circle")
                     }
                 } header: {
-                    Label("Daily Tasks", systemImage: "checkmark.square")
+                    Text("Daily Tasks")
                 } footer: {
-                    Text("Add the daily habits that make up this system. Example: Run, Lift weights")
+                    Text("Add the daily habits that make up this system")
                 }
 
                 // MARK: - Periodic Tests
@@ -122,13 +101,9 @@ struct CreateSystemView: View {
                                     .font(.subheadline)
                                     .fontWeight(.medium)
 
-                                HStack(spacing: 4) {
-                                    Text(test.frequency.displayText)
-                                    Text("•")
-                                    Text(test.unit)
-                                }
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                                Text("\(test.frequency.displayText) • \(test.unit)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
 
                             Spacer()
@@ -147,40 +122,15 @@ struct CreateSystemView: View {
                     Button {
                         showAddTest = true
                     } label: {
-                        Label(tests.isEmpty ? "Add Your First Test" : "Add Periodic Test", systemImage: "plus.circle")
+                        Label(tests.isEmpty ? "Add Your First Test" : "Add Test", systemImage: "plus.circle")
                     }
                 } header: {
-                    Label("Periodic Tests", systemImage: "chart.bar")
+                    Text("Periodic Tests")
                 } footer: {
-                    Text("Add measurements to track system effectiveness. Example: Mile time, Max pushups")
+                    Text("Track measurements like mile time or max pushups")
                 }
 
-                // MARK: - Preview
-                if !systemName.isEmpty {
-                    Section {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(spacing: 12) {
-                                Image(systemName: selectedCategory.systemIcon)
-                                    .font(.title2)
-                                    .foregroundStyle(Color(hex: selectedCategory.defaultColor))
-                                    .frame(width: 44, height: 44)
-                                    .background(Color(hex: selectedCategory.defaultColor).opacity(0.15))
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(systemName)
-                                        .font(.headline)
-
-                                    Text("\(tasks.count) tasks • \(tests.count) tests")
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    } header: {
-                        Text("Preview")
-                    }
-                }
+                // Preview removed - was causing keyboard delays
             }
             .navigationTitle("New System")
             .navigationBarTitleDisplayMode(.inline)
