@@ -14,6 +14,9 @@ struct NumuApp: App {
     let modelContainer: ModelContainer
     @State private var notificationManager = NotificationManager()
 
+    // Notification delegate for foreground notifications
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+
     init() {
         print("🚀 [NUMU] ========================================")
         print("🚀 [NUMU] App initialization started")
@@ -114,5 +117,28 @@ struct NumuApp: App {
                 }
         }
         .modelContainer(modelContainer)
+    }
+}
+
+// MARK: - App Delegate for Foreground Notifications
+
+class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey : Any]? = nil) -> Bool {
+        // Set the notification delegate
+        UNUserNotificationCenter.current().delegate = self
+        return true
+    }
+
+    // This method is called when a notification arrives while the app is in the foreground
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        // Show the notification even when app is in foreground
+        completionHandler([.banner, .sound, .badge])
+    }
+
+    // Handle notification taps
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        // Handle the notification tap here if needed
+        print("📬 Notification tapped: \(response.notification.request.content.title)")
+        completionHandler()
     }
 }

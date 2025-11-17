@@ -15,6 +15,8 @@ struct DebugMenuView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
 
+    @Binding var isDeletingTestData: Bool
+
     @State private var showClearConfirmation = false
     @State private var generatingData = false
 
@@ -140,13 +142,30 @@ struct DebugMenuView: View {
     }
 
     private func clearTestData() {
-        let generator = TestDataGenerator(modelContext: modelContext)
-        generator.clearTestData()
+        // Capture context before dismissing
+        let context = modelContext
+
+        // Show loading overlay on parent view
+        isDeletingTestData = true
+
+        // Dismiss this sheet
+        dismiss()
+
+        // Delete after sheet animation completes (0.4s)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+            let generator = TestDataGenerator(modelContext: context)
+            generator.clearTestData()
+
+            // Hide loading overlay after deletion completes (give @Query time to update)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                isDeletingTestData = false
+            }
+        }
     }
 }
 
 #Preview {
-    DebugMenuView()
+    DebugMenuView(isDeletingTestData: .constant(false))
 }
 
 #endif

@@ -384,8 +384,39 @@ struct TaskDetailRow: View {
 
             // Atomic Habits section (if any fields are filled)
             if hasAtomicHabits {
-                DisclosureGroup(isExpanded: $showAtomicHabits) {
-                    VStack(alignment: .leading, spacing: 12) {
+                Divider()
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        showAtomicHabits.toggle()
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "book.closed")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Text("The 4 Laws")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundStyle(.secondary)
+
+                        Spacer()
+
+                        Image(systemName: "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(showAtomicHabits ? 180 : 0))
+                    }
+                    .padding(.horizontal)
+                    .padding(.vertical, 10)
+                }
+                .buttonStyle(.plain)
+
+                if showAtomicHabits {
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 10) {
                         if let cue = task.cue {
                             atomicHabitRow(
                                 icon: "eye",
@@ -432,24 +463,16 @@ struct TaskDetailRow: View {
                         }
                     }
                     .padding(.horizontal)
-                    .padding(.bottom, 12)
-                } label: {
-                    HStack {
-                        Label("The 4 Laws", systemImage: "book.closed")
-                            .font(.caption)
-                            .fontWeight(.medium)
-                            .foregroundStyle(.secondary)
-
-                        Spacer()
-                    }
-                    .padding(.horizontal)
-                    .padding(.vertical, 8)
-                    .background(Color(.systemGray5))
+                    .padding(.vertical, 10)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                .tint(.secondary)
             }
         }
-        .background(Color(.systemGray6))
+        .background(Color(.systemBackground))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color(.separator).opacity(0.3), lineWidth: 0.5)
+        )
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .onAppear {
             isCompleted = task.isCompletedToday()

@@ -15,6 +15,7 @@ struct SystemsDashboardView: View {
     @State private var showCreateSystem = false
     @State private var showSettings = false
     @State private var cloudKitService = CloudKitService()
+    @State private var isDeletingTestData = false
 
     #if DEBUG
     @State private var showDebugMenu = false
@@ -22,6 +23,8 @@ struct SystemsDashboardView: View {
     #endif
 
     var overallCompletionRate: Double {
+        // Don't access systems during deletion to avoid accessing deleted objects
+        guard !isDeletingTestData else { return 0.0 }
         guard !systems.isEmpty else { return 0.0 }
 
         let totalTasks = systems.reduce(0) { $0 + $1.todaysTasks.count }
@@ -32,32 +35,53 @@ struct SystemsDashboardView: View {
     }
 
     var totalActiveSystems: Int {
-        systems.filter { !$0.todaysTasks.isEmpty }.count
+        // Don't access systems during deletion to avoid accessing deleted objects
+        guard !isDeletingTestData else { return 0 }
+        return systems.filter { !$0.todaysTasks.isEmpty }.count
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(spacing: 24) {
-                    // MARK: - CloudKit Status Banner
-                    if cloudKitService.syncStatus == .notSignedIn {
-                        cloudKitStatusBanner
+            ZStack {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        // MARK: - CloudKit Status Banner
+                        if cloudKitService.syncStatus == .notSignedIn {
+                            cloudKitStatusBanner
+                        }
+
+                        // MARK: - Overall Progress
+                        if !systems.isEmpty {
+                            overallProgressCard
+                        }
+
+                        // MARK: - Systems List
+                        systemsList
+
+                        // MARK: - Empty State
+                        if systems.isEmpty {
+                            emptyState
+                        }
                     }
+                    .padding()
+                }
+                .blur(radius: isDeletingTestData ? 10 : 0)
 
-                    // MARK: - Overall Progress
-                    if !systems.isEmpty {
-                        overallProgressCard
-                    }
+                // Loading overlay during deletion
+                if isDeletingTestData {
+                    Color.black.opacity(0.4)
+                        .ignoresSafeArea()
 
-                    // MARK: - Systems List
-                    systemsList
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .scaleEffect(1.5)
+                            .tint(.white)
 
-                    // MARK: - Empty State
-                    if systems.isEmpty {
-                        emptyState
+                        Text("Clearing test data...")
+                            .foregroundStyle(.white)
+                            .font(.headline)
                     }
                 }
-                .padding()
             }
             .navigationTitle("Systems")
             .toolbar {
@@ -106,7 +130,7 @@ struct SystemsDashboardView: View {
             }
             #if DEBUG
             .sheet(isPresented: $showDebugMenu) {
-                DebugMenuView()
+                DebugMenuView(isDeletingTestData: $isDeletingTestData)
             }
             #endif
             .onAppear {
@@ -218,14 +242,21 @@ struct SystemsDashboardView: View {
     }
 
     private var totalTodaysTasks: Int {
-        systems.reduce(0) { $0 + $1.todaysTasks.count }
+        // Don't access systems during deletion to avoid accessing deleted objects
+        guard !isDeletingTestData else { return 0 }
+        return systems.reduce(0) { $0 + $1.todaysTasks.count }
     }
 
     private var totalCompletedTasks: Int {
-        systems.reduce(0) { $0 + $1.completedTodayCount }
+        // Don't access systems during deletion to avoid accessing deleted objects
+        guard !isDeletingTestData else { return 0 }
+        return systems.reduce(0) { $0 + $1.completedTodayCount }
     }
 
     private var motivationalMessage: String {
+        // Don't access systems during deletion to avoid accessing deleted objects
+        guard !isDeletingTestData else { return "Clearing test data..." }
+
         if systems.isEmpty {
             return "Create your first system to start building your identity"
         } else if overallCompletionRate == 1.0 {
@@ -266,7 +297,8 @@ struct SystemsDashboardView: View {
     // MARK: - Systems List
     private var systemsList: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if !systems.isEmpty {
+            // Don't render systems during deletion to avoid accessing deleted objects
+            if !isDeletingTestData && !systems.isEmpty {
                 Text("Your Systems")
                     .font(.title2)
                     .fontWeight(.bold)

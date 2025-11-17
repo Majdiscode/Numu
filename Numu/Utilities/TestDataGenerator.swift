@@ -106,35 +106,17 @@ struct TestDataGenerator {
 
             print("   Found \(testSystems.count) test systems to delete")
 
+            // Simply delete the systems - cascade delete will handle all related data
+            // (tasks, logs, tests, entries) automatically
             for system in testSystems {
-                // Manually delete tasks and logs
-                if let tasks = system.tasks {
-                    for task in tasks {
-                        if let logs = task.logs {
-                            for log in logs {
-                                modelContext.delete(log)
-                            }
-                        }
-                        modelContext.delete(task)
-                    }
-                }
-
-                // Manually delete tests and entries
-                if let tests = system.tests {
-                    for test in tests {
-                        if let entries = test.entries {
-                            for entry in entries {
-                                modelContext.delete(entry)
-                            }
-                        }
-                        modelContext.delete(test)
-                    }
-                }
-
                 modelContext.delete(system)
             }
 
             try modelContext.save()
+
+            // Process pending changes to ensure cleanup is complete
+            modelContext.processPendingChanges()
+
             print("✅ [TEST DATA] Test data cleared successfully!")
         } catch {
             print("❌ [TEST DATA] Error clearing test data: \(error)")

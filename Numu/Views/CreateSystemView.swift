@@ -11,6 +11,7 @@ import SwiftData
 struct CreateSystemView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(NotificationManager.self) private var notificationManager
 
     // System details
     @State private var systemName: String = ""
@@ -35,6 +36,7 @@ struct CreateSystemView: View {
                 Section {
                     TextField("System name", text: $systemName)
                         .textFieldStyle(.plain)
+                        .autocorrectionDisabled()
 
                     TextField("Description (optional)", text: $systemDescription, axis: .vertical)
                         .textFieldStyle(.plain)
@@ -78,6 +80,7 @@ struct CreateSystemView: View {
                                 Image(systemName: "trash")
                                     .foregroundStyle(.red)
                             }
+                            .buttonStyle(.borderless)
                         }
                     }
 
@@ -116,6 +119,7 @@ struct CreateSystemView: View {
                                 Image(systemName: "trash")
                                     .foregroundStyle(.red)
                             }
+                            .buttonStyle(.borderless)
                         }
                     }
 
@@ -132,6 +136,7 @@ struct CreateSystemView: View {
 
                 // Preview removed - was causing keyboard delays
             }
+            .scrollDismissesKeyboard(.interactively)
             .navigationTitle("New System")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -480,7 +485,7 @@ struct AddTaskSheet: View {
                                     .foregroundStyle(.blue)
 
                                 TextField("When/where will you do this?", text: $cue, axis: .vertical)
-                                    .textFieldStyle(.roundedBorder)
+                                    .textFieldStyle(.plain)
                                     .lineLimit(2...3)
 
                                 Toggle("Set specific time", isOn: $useCueTime)
@@ -502,7 +507,7 @@ struct AddTaskSheet: View {
                                     .foregroundStyle(.purple)
 
                                 TextField("How can you make this appealing?", text: $attractiveness, axis: .vertical)
-                                    .textFieldStyle(.roundedBorder)
+                                    .textFieldStyle(.plain)
                                     .lineLimit(2...3)
                             }
                             .padding(.vertical, 8)
@@ -517,7 +522,7 @@ struct AddTaskSheet: View {
                                     .foregroundStyle(.green)
 
                                 TextField("2-minute version or strategy", text: $easeStrategy, axis: .vertical)
-                                    .textFieldStyle(.roundedBorder)
+                                    .textFieldStyle(.plain)
                                     .lineLimit(2...3)
                             }
                             .padding(.vertical, 8)
@@ -532,7 +537,7 @@ struct AddTaskSheet: View {
                                     .foregroundStyle(.orange)
 
                                 TextField("Immediate reward after completing", text: $reward, axis: .vertical)
-                                    .textFieldStyle(.roundedBorder)
+                                    .textFieldStyle(.plain)
                                     .lineLimit(2...3)
                             }
                             .padding(.vertical, 8)
