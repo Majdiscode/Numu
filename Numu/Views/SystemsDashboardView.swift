@@ -13,7 +13,6 @@ struct SystemsDashboardView: View {
     @Query private var systems: [System]
 
     @State private var showCreateSystem = false
-    @State private var showSettings = false
     @State private var cloudKitService = CloudKitService()
     @State private var isDeletingTestData = false
 
@@ -85,22 +84,6 @@ struct SystemsDashboardView: View {
             }
             .navigationTitle("Systems")
             .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    HStack(spacing: 16) {
-                        NavigationLink(destination: AnalyticsView()) {
-                            Image(systemName: "chart.line.uptrend.xyaxis")
-                                .font(.title3)
-                        }
-
-                        Button {
-                            showSettings = true
-                        } label: {
-                            Image(systemName: "gear")
-                                .font(.title3)
-                        }
-                    }
-                }
-
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showCreateSystem = true
@@ -124,9 +107,6 @@ struct SystemsDashboardView: View {
             }
             .sheet(isPresented: $showCreateSystem) {
                 CreateSystemView()
-            }
-            .sheet(isPresented: $showSettings) {
-                SettingsView()
             }
             #if DEBUG
             .sheet(isPresented: $showDebugMenu) {

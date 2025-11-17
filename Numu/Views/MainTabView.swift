@@ -1,0 +1,31 @@
+//
+//  MainTabView.swift
+//  Numu
+//
+//  Root tab navigation view
+//
+
+import SwiftUI
+
+struct MainTabView: View {
+    var body: some View {
+        TabView {
+            Tab("Systems", systemImage: "gearshape.2") {
+                SystemsDashboardView()
+            }
+
+            Tab("Analytics", systemImage: "chart.line.uptrend.xyaxis") {
+                AnalyticsView()
+            }
+
+            Tab("Settings", systemImage: "gear") {
+                SettingsView()
+            }
+        }
+    }
+}
+
+#Preview {
+    MainTabView()
+        .modelContainer(for: [System.self, HabitTask.self, HabitTaskLog.self, PerformanceTest.self, PerformanceTestEntry.self])
+}

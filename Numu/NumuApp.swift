@@ -107,7 +107,7 @@ struct NumuApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainTabView()
                 .environment(notificationManager)
                 .task {
                     // Request notification permissions on first launch
