@@ -29,8 +29,9 @@ final class HabitTask {
     }
 
     // Frequency control - stored as separate properties for SwiftData compatibility
-    private var frequencyType: String = "daily"  // "daily", "weekdays", "weekends", "specificDays"
+    private var frequencyType: String = "daily"  // "daily", "weekdays", "weekends", "specificDays", "weeklyTarget"
     private var frequencyDays: [Int] = []  // Used for specificDays case
+    private var frequencyTargetTimes: Int = 0  // Used for weeklyTarget case (e.g., 3 = "3 times per week")
 
     var frequency: TaskFrequency {
         get {
@@ -48,6 +49,9 @@ final class HabitTask {
                     // Safely access frequencyDays - this may be corrupted from V1
                     let days = frequencyDays.isEmpty ? [] : frequencyDays
                     return TaskFrequency.specificDays(days)
+                case "weeklyTarget":
+                    let times = frequencyTargetTimes > 0 ? frequencyTargetTimes : 1
+                    return TaskFrequency.weeklyTarget(times: times)
                 default:
                     print("⚠️ [HabitTask] Unknown frequencyType '\(frequencyType)', defaulting to .daily")
                     return TaskFrequency.daily
@@ -63,15 +67,23 @@ final class HabitTask {
             case .daily:
                 frequencyType = "daily"
                 frequencyDays = []
+                frequencyTargetTimes = 0
             case .weekdays:
                 frequencyType = "weekdays"
                 frequencyDays = []
+                frequencyTargetTimes = 0
             case .weekends:
                 frequencyType = "weekends"
                 frequencyDays = []
+                frequencyTargetTimes = 0
             case .specificDays(let days):
                 frequencyType = "specificDays"
                 frequencyDays = days
+                frequencyTargetTimes = 0
+            case .weeklyTarget(let times):
+                frequencyType = "weeklyTarget"
+                frequencyDays = []
+                frequencyTargetTimes = times
             }
         }
     }
@@ -127,15 +139,23 @@ final class HabitTask {
         case .daily:
             self.frequencyType = "daily"
             self.frequencyDays = []
+            self.frequencyTargetTimes = 0
         case .weekdays:
             self.frequencyType = "weekdays"
             self.frequencyDays = []
+            self.frequencyTargetTimes = 0
         case .weekends:
             self.frequencyType = "weekends"
             self.frequencyDays = []
+            self.frequencyTargetTimes = 0
         case .specificDays(let days):
             self.frequencyType = "specificDays"
             self.frequencyDays = days
+            self.frequencyTargetTimes = 0
+        case .weeklyTarget(let times):
+            self.frequencyType = "weeklyTarget"
+            self.frequencyDays = []
+            self.frequencyTargetTimes = times
         }
     }
 
@@ -179,6 +199,9 @@ final class HabitTask {
             return weekday == 1 || weekday == 7 // Saturday or Sunday
         case .specificDays(let days):
             return days.contains(weekday)
+        case .weeklyTarget(let times):
+            // Weekly tasks are "due" every day until the weekly target is met
+            return completionsInWeek(containing: date) < times
         }
     }
 
@@ -193,9 +216,54 @@ final class HabitTask {
         return logs?.contains { Calendar.current.isDate($0.date, inSameDayAs: targetDate) } ?? false
     }
 
+    // MARK: - Weekly Frequency Helpers
+
+    /// Count completions in the current calendar week
+    func completionsThisWeek() -> Int {
+        completionsInWeek(containing: Date())
+    }
+
+    /// Count completions in a specific calendar week
+    func completionsInWeek(containing date: Date) -> Int {
+        guard let logs = logs else { return 0 }
+
+        let calendar = Calendar.current
+        let weekStart = calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
+        let weekEnd = calendar.date(byAdding: .day, value: 7, to: weekStart) ?? date
+
+        return logs.filter { log in
+            log.date >= weekStart && log.date < weekEnd
+        }.count
+    }
+
+    /// Check if weekly target has been met for current week
+    func weeklyTargetMet() -> Bool {
+        guard case .weeklyTarget(let times) = frequency else { return false }
+        return completionsThisWeek() >= times
+    }
+
+    /// Check if task is over weekly target (for gray-out display)
+    func isOverWeeklyTarget() -> Bool {
+        guard case .weeklyTarget(let times) = frequency else { return false }
+        return completionsThisWeek() >= times
+    }
+
+    /// Get weekly progress display (e.g., "2/3 this week")
+    func weeklyProgressText() -> String? {
+        guard case .weeklyTarget(let times) = frequency else { return nil }
+        let completions = completionsThisWeek()
+        return "\(completions)/\(times) this week"
+    }
+
     private func calculateStreak() -> Int {
         guard let logs = logs else { return 0 }
 
+        // For weekly targets, count consecutive weeks meeting the target
+        if case .weeklyTarget(let times) = frequency {
+            return calculateWeeklyStreak(targetTimes: times)
+        }
+
+        // For daily/specific day frequencies, count consecutive days
         let sortedLogs = logs.sorted { $0.date > $1.date }
         var streak = 0
         var currentDate = Calendar.current.startOfDay(for: Date())
@@ -213,9 +281,39 @@ final class HabitTask {
         return streak
     }
 
+    private func calculateWeeklyStreak(targetTimes: Int) -> Int {
+        let calendar = Calendar.current
+        var streak = 0
+        var checkDate = Date()
+
+        // Count consecutive weeks where target was met
+        while true {
+            let completions = completionsInWeek(containing: checkDate)
+
+            if completions >= targetTimes {
+                streak += 1
+                // Move to previous week
+                guard let previousWeek = calendar.date(byAdding: .weekOfYear, value: -1, to: checkDate) else {
+                    break
+                }
+                checkDate = previousWeek
+            } else {
+                break
+            }
+        }
+
+        return streak
+    }
+
     private func calculateLongestStreak() -> Int {
         guard let logs = logs else { return 0 }
 
+        // For weekly targets, calculate longest streak of weeks meeting target
+        if case .weeklyTarget(let times) = frequency {
+            return calculateLongestWeeklyStreak(targetTimes: times)
+        }
+
+        // For daily/specific day frequencies, count longest consecutive days
         let sortedLogs = logs.sorted { $0.date < $1.date }
         var longest = 0
         var current = 0
@@ -237,6 +335,52 @@ final class HabitTask {
             }
 
             lastDate = logDate
+        }
+
+        return max(longest, current)
+    }
+
+    private func calculateLongestWeeklyStreak(targetTimes: Int) -> Int {
+        guard let logs = logs, !logs.isEmpty else { return 0 }
+
+        let calendar = Calendar.current
+        var longest = 0
+        var current = 0
+        var lastWeekStart: Date?
+
+        // Get earliest log to start from
+        let sortedLogs = logs.sorted { $0.date < $1.date }
+        guard let firstLog = sortedLogs.first else { return 0 }
+
+        var checkDate = firstLog.date
+
+        // Iterate through each week from first log to now
+        while checkDate <= Date() {
+            let weekStart = calendar.dateInterval(of: .weekOfYear, for: checkDate)?.start ?? checkDate
+            let completions = completionsInWeek(containing: checkDate)
+
+            if completions >= targetTimes {
+                // Check if this week is consecutive with last successful week
+                if let last = lastWeekStart,
+                   let weeksBetween = calendar.dateComponents([.weekOfYear], from: last, to: weekStart).weekOfYear,
+                   weeksBetween == 1 {
+                    current += 1
+                } else {
+                    longest = max(longest, current)
+                    current = 1
+                }
+                lastWeekStart = weekStart
+            } else if current > 0 {
+                longest = max(longest, current)
+                current = 0
+                lastWeekStart = nil
+            }
+
+            // Move to next week
+            guard let nextWeek = calendar.date(byAdding: .weekOfYear, value: 1, to: checkDate) else {
+                break
+            }
+            checkDate = nextWeek
         }
 
         return max(longest, current)
@@ -420,6 +564,7 @@ enum TaskFrequency: Codable, Equatable, Hashable {
     case weekdays
     case weekends
     case specificDays([Int])  // Array of weekday numbers (1 = Sunday, 2 = Monday, etc.)
+    case weeklyTarget(times: Int)  // Flexible weekly goal (e.g., 3 = "3 times per week")
 
     var displayText: String {
         switch self {
@@ -432,6 +577,8 @@ enum TaskFrequency: Codable, Equatable, Hashable {
         case .specificDays(let days):
             let dayNames = days.map { weekdayName(for: $0) }
             return dayNames.joined(separator: ", ")
+        case .weeklyTarget(let times):
+            return "\(times)x per week"
         }
     }
 
@@ -446,6 +593,7 @@ enum TaskFrequency: Codable, Equatable, Hashable {
     enum CodingKeys: String, CodingKey {
         case type
         case days
+        case times
     }
 
     init(from decoder: Decoder) throws {
@@ -462,6 +610,9 @@ enum TaskFrequency: Codable, Equatable, Hashable {
         case "specificDays":
             let days = try container.decode([Int].self, forKey: .days)
             self = .specificDays(days)
+        case "weeklyTarget":
+            let times = try container.decode(Int.self, forKey: .times)
+            self = .weeklyTarget(times: times)
         default:
             throw DecodingError.dataCorruptedError(forKey: .type, in: container, debugDescription: "Unknown TaskFrequency type")
         }
@@ -480,6 +631,9 @@ enum TaskFrequency: Codable, Equatable, Hashable {
         case .specificDays(let days):
             try container.encode("specificDays", forKey: .type)
             try container.encode(days, forKey: .days)
+        case .weeklyTarget(let times):
+            try container.encode("weeklyTarget", forKey: .type)
+            try container.encode(times, forKey: .times)
         }
     }
 }

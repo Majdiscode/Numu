@@ -113,6 +113,11 @@ class NotificationManager {
                 let trigger = UNCalendarNotificationTrigger(dateMatching: dayComponents, repeats: true)
                 scheduleNotification(identifier: "task-\(task.id)-\(day)", content: content, trigger: trigger)
             }
+
+        case .weeklyTarget:
+            // Weekly targets can be completed any day, so remind every day
+            let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
+            scheduleNotification(identifier: "task-\(task.id)", content: content, trigger: trigger)
         }
 
         print("✅ Scheduled reminder for '\(task.name)' at \(cueTime.formatted(date: .omitted, time: .shortened))")
@@ -142,7 +147,7 @@ class NotificationManager {
             for day in days {
                 identifiers.append("task-\(task.id)-\(day)")
             }
-        case .daily:
+        case .daily, .weeklyTarget:
             break // Already have the base identifier
         }
 

@@ -30,6 +30,9 @@ final class PerformanceTest {
     private var frequencyType: String = "weeks"  // "days" or "weeks"
     private var frequencyCount: Int = 1
 
+    // Initial offset for spacing out tests (e.g., pushups today, pullups in 2 days, mile in 4 days)
+    var initialOffsetDays: Int = 0
+
     var trackingFrequency: TestFrequency {
         get {
             switch frequencyType {
@@ -67,7 +70,8 @@ final class PerformanceTest {
         goalDirection: TestGoalDirection,
         trackingFrequency: TestFrequency,
         description: String? = nil,
-        targetValue: Double? = nil
+        targetValue: Double? = nil,
+        initialOffsetDays: Int = 0
     ) {
         self.id = UUID()
         self.createdAt = Date()
@@ -76,6 +80,7 @@ final class PerformanceTest {
         self.goalDirection = goalDirection
         self.testDescription = description
         self.targetValue = targetValue
+        self.initialOffsetDays = initialOffsetDays
 
         // Set tracking frequency via the setter
         switch trackingFrequency {
@@ -152,7 +157,12 @@ final class PerformanceTest {
     /// Get the next due date for this test
     func nextDueDate() -> Date? {
         guard let entries = entries, let lastEntry = entries.sorted(by: { $0.date > $1.date }).first else {
-            return Date()  // Due now
+            // No entries yet - use initial offset from creation date
+            return Calendar.current.date(
+                byAdding: .day,
+                value: initialOffsetDays,
+                to: createdAt
+            )
         }
 
         return Calendar.current.date(

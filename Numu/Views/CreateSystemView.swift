@@ -214,7 +214,8 @@ struct CreateSystemView: View {
                 unit: testBuilder.unit,
                 goalDirection: testBuilder.goalDirection,
                 trackingFrequency: testBuilder.frequency,
-                description: testBuilder.description
+                description: testBuilder.description,
+                initialOffsetDays: testBuilder.initialOffsetDays
             )
             test.system = system
             modelContext.insert(test)
@@ -327,6 +328,7 @@ struct TestBuilder: Identifiable {
     var goalDirection: TestGoalDirection
     var frequency: TestFrequency
     var description: String?
+    var initialOffsetDays: Int = 0  // Days to wait before first test is due
 }
 
 // MARK: - Add Task Sheet
@@ -337,6 +339,15 @@ struct AddTaskSheet: View {
     @State private var taskDescription: String = ""
     @State private var selectedFrequency: TaskFrequency = .daily
     @State private var selectedHabitType: HabitType = .positive
+
+    // Weekly frequency state
+    @State private var frequencyMode: FrequencyMode = .daily
+    @State private var weeklyTargetTimes: Int = 3
+
+    enum FrequencyMode: String, CaseIterable {
+        case daily = "Daily"
+        case weekly = "Weekly"
+    }
 
     // Time limits for negative habits
     @State private var baselineHours: Int = 2
@@ -383,13 +394,47 @@ struct AddTaskSheet: View {
                 }
 
                 Section {
-                    Picker("Frequency", selection: $selectedFrequency) {
-                        Text("Every Day").tag(TaskFrequency.daily)
-                        Text("Weekdays").tag(TaskFrequency.weekdays)
-                        Text("Weekends").tag(TaskFrequency.weekends)
+                    // Frequency mode toggle
+                    Picker("Frequency Type", selection: $frequencyMode) {
+                        ForEach(FrequencyMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .onChange(of: frequencyMode) { _, newMode in
+                        // Update selectedFrequency based on mode
+                        switch newMode {
+                        case .daily:
+                            selectedFrequency = .daily
+                        case .weekly:
+                            selectedFrequency = .weeklyTarget(times: weeklyTargetTimes)
+                        }
+                    }
+
+                    // Show different options based on frequency mode
+                    if frequencyMode == .daily {
+                        Picker("Schedule", selection: $selectedFrequency) {
+                            Text("Every Day").tag(TaskFrequency.daily)
+                            Text("Weekdays").tag(TaskFrequency.weekdays)
+                            Text("Weekends").tag(TaskFrequency.weekends)
+                        }
+                    } else {
+                        // Weekly target picker
+                        Picker("Times per week", selection: $weeklyTargetTimes) {
+                            ForEach(1...7, id: \.self) { count in
+                                Text("\(count)x per week").tag(count)
+                            }
+                        }
+                        .onChange(of: weeklyTargetTimes) { _, newValue in
+                            selectedFrequency = .weeklyTarget(times: newValue)
+                        }
                     }
                 } header: {
                     Text("Frequency")
+                } footer: {
+                    if frequencyMode == .weekly {
+                        Text("Task will show until you complete it \(weeklyTargetTimes) times this week. You can still complete it for bonus after reaching your goal.")
+                    }
                 }
 
                 // MARK: - Time Limits (Negative Habits Only)
@@ -598,6 +643,7 @@ struct AddTestSheet: View {
     @State private var testDescription: String = ""
     @State private var goalDirection: TestGoalDirection = .higher
     @State private var frequency: TestFrequency = .biweekly
+    @State private var initialOffsetDays: Int = 0
 
     let onAdd: (TestBuilder) -> Void
 
@@ -641,6 +687,21 @@ struct AddTestSheet: View {
                 } header: {
                     Text("How Often to Test")
                 }
+
+                Section {
+                    Picker("First Test", selection: $initialOffsetDays) {
+                        Text("Due today").tag(0)
+                        Text("Due in 2 days").tag(2)
+                        Text("Due in 3 days").tag(3)
+                        Text("Due in 4 days").tag(4)
+                        Text("Due in 5 days").tag(5)
+                        Text("Due in 7 days").tag(7)
+                    }
+                } header: {
+                    Text("When to Start")
+                } footer: {
+                    Text("Space out tests so you're not doing them all on the same day")
+                }
             }
             .navigationTitle("Add Test")
             .navigationBarTitleDisplayMode(.inline)
@@ -658,7 +719,8 @@ struct AddTestSheet: View {
                             unit: selectedUnit.displayValue,
                             goalDirection: goalDirection,
                             frequency: frequency,
-                            description: testDescription.isEmpty ? nil : testDescription
+                            description: testDescription.isEmpty ? nil : testDescription,
+                            initialOffsetDays: initialOffsetDays
                         )
                         onAdd(test)
                         dismiss()

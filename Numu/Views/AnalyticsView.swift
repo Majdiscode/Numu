@@ -19,14 +19,14 @@ struct AnalyticsView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
+                    // MARK: - Overall Trends (Chart at top)
+                    overallTrendsSection
+
                     // MARK: - Overview Stats
                     overviewStats
 
                     // MARK: - Per-System Analytics
                     perSystemAnalytics
-
-                    // MARK: - Overall Trends
-                    overallTrendsSection
                 }
                 .padding()
             }
@@ -106,9 +106,9 @@ struct AnalyticsView: View {
     // MARK: - Overall Trends Section
     private var overallTrendsSection: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Text("Overall Completion Trend")
-                    .font(.title2)
+            HStack(alignment: .center) {
+                Text("Completion Trend")
+                    .font(.headline)
                     .fontWeight(.bold)
 
                 Spacer()
@@ -120,7 +120,7 @@ struct AnalyticsView: View {
                     }
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 200)
+                .frame(width: 180)
             }
 
             VStack(spacing: 16) {

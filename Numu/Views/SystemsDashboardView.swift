@@ -42,6 +42,10 @@ struct SystemsDashboardView: View {
     var body: some View {
         NavigationStack {
             ZStack {
+                // Layered background for depth
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
+
                 ScrollView {
                     VStack(spacing: 24) {
                         // MARK: - CloudKit Status Banner
@@ -166,6 +170,7 @@ struct SystemsDashboardView: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.orange.opacity(0.3), lineWidth: 1)
         )
+        .elevation(.level1)
     }
 
     // MARK: - Overall Progress Card
@@ -227,10 +232,21 @@ struct SystemsDashboardView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
-        .padding()
-        .background(Color(.systemBackground))
+        .padding(20)
+        .background(
+            // Subtle gradient for depth
+            LinearGradient(
+                colors: [
+                    Color(.systemBackground),
+                    Color(.systemBackground).opacity(0.95)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
+        .cardBorder(cornerRadius: 16, opacity: 0.1)
+        .elevation(.level2)
     }
 
     private var totalTodaysTasks: Int {
@@ -250,17 +266,17 @@ struct SystemsDashboardView: View {
         guard !isDeletingTestData else { return "Clearing test data..." }
 
         if systems.isEmpty {
-            return "Create your first system to start building your identity"
+            return "Create your first system to begin"
         } else if overallCompletionRate == 1.0 {
-            return "Perfect! All systems are running smoothly"
+            return "Perfect! All systems running smoothly"
         } else if overallCompletionRate >= 0.75 {
-            return "Excellent! Your systems are strong today"
+            return "Excellent work today"
         } else if overallCompletionRate >= 0.5 {
-            return "Keep going! Every task reinforces your identity"
+            return "Keep going, you're doing great"
         } else if totalCompletedTasks == 0 {
-            return "Today is a new opportunity to live your systems"
+            return "Start fresh, one task at a time"
         } else {
-            return "Progress, not perfection. Keep showing up"
+            return "Progress, not perfection"
         }
     }
 
@@ -292,7 +308,7 @@ struct SystemsDashboardView: View {
                     NavigationLink(destination: SystemDetailView(system: system)) {
                         SystemCard(system: system, modelContext: modelContext)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(ScaleButtonStyle())
                 }
             }
         }
@@ -396,14 +412,8 @@ struct SystemCard: View {
             // Tasks
             if !todaysTasks.isEmpty {
                 VStack(spacing: 8) {
-                    ForEach(todaysTasks.prefix(3)) { task in
+                    ForEach(todaysTasks) { task in
                         TaskRow(task: task, modelContext: modelContext)
-                    }
-
-                    if todaysTasks.count > 3 {
-                        Text("+\(todaysTasks.count - 3) more tasks")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -420,10 +430,7 @@ struct SystemCard: View {
                 }
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
+        .elevatedCard(elevation: .level1, cornerRadius: 16, padding: 16)
     }
 }
 
@@ -445,26 +452,36 @@ struct TaskRow: View {
                 handleTaskTap()
             } label: {
                 let completionColor: Color = task.habitType == .positive ? .green : .orange
-                Image(systemName: isCompleted ? task.habitType.icon : "circle")
+                let isOverTarget = task.isOverWeeklyTarget()
+                Image(systemName: isCompleted || isOverTarget ? task.habitType.icon : "circle")
                     .font(.title3)
-                    .foregroundStyle(isCompleted ? completionColor : .gray.opacity(0.3))
+                    .foregroundStyle((isCompleted || isOverTarget) ? completionColor.opacity(isOverTarget && !isCompleted ? 0.5 : 1.0) : .gray.opacity(0.3))
             }
             .buttonStyle(.plain)
 
-            HStack(spacing: 6) {
-                Text(task.name)
-                    .font(.subheadline)
-                    .foregroundStyle(isCompleted ? .secondary : .primary)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(task.name)
+                        .font(.subheadline)
+                        .foregroundStyle(isCompleted ? .secondary : .primary)
 
-                if task.habitType == .negative {
-                    Text("Break")
+                    if task.habitType == .negative {
+                        Text("Break")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.orange.opacity(0.8))
+                            .clipShape(Capsule())
+                    }
+                }
+
+                // Show weekly progress for weekly targets
+                if let progressText = task.weeklyProgressText() {
+                    Text(progressText)
                         .font(.caption2)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(Color.orange.opacity(0.8))
-                        .clipShape(Capsule())
+                        .foregroundStyle(task.weeklyTargetMet() ? .green : .blue)
                 }
             }
 
@@ -475,9 +492,16 @@ struct TaskRow: View {
                     Image(systemName: "flame.fill")
                         .font(.caption2)
                         .foregroundStyle(.orange)
-                    Text("\(task.currentStreak)")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+                    // Show week/day based on frequency type
+                    if case .weeklyTarget = task.frequency {
+                        Text("\(task.currentStreak)w")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    } else {
+                        Text("\(task.currentStreak)")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
                 }
             }
         }

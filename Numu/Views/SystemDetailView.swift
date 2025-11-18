@@ -326,9 +326,10 @@ struct TaskDetailRow: View {
                 HStack(spacing: 16) {
                     // Completion indicator
                     let completionColor: Color = task.habitType == .positive ? .green : .orange
-                    Image(systemName: isCompleted ? task.habitType.icon : "circle")
+                    let isOverTarget = task.isOverWeeklyTarget()
+                    Image(systemName: isCompleted || isOverTarget ? task.habitType.icon : "circle")
                         .font(.title2)
-                        .foregroundStyle(isCompleted ? completionColor : .gray.opacity(0.3))
+                        .foregroundStyle((isCompleted || isOverTarget) ? completionColor.opacity(isOverTarget && !isCompleted ? 0.5 : 1.0) : .gray.opacity(0.3))
 
                     // Task details
                     VStack(alignment: .leading, spacing: 4) {
@@ -349,9 +350,22 @@ struct TaskDetailRow: View {
                             }
                         }
 
-                        Text(task.frequency.displayText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 6) {
+                            Text(task.frequency.displayText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            // Weekly progress indicator
+                            if let progressText = task.weeklyProgressText() {
+                                Text("•")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                Text(progressText)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundStyle(task.weeklyTargetMet() ? .green : .blue)
+                            }
+                        }
 
                         // Stats
                         HStack(spacing: 12) {
@@ -360,9 +374,16 @@ struct TaskDetailRow: View {
                                     Image(systemName: "flame.fill")
                                         .font(.caption2)
                                         .foregroundStyle(.orange)
-                                    Text("\(task.currentStreak) day")
-                                        .font(.caption)
-                                        .foregroundStyle(.orange)
+                                    // Show "week" for weekly targets, "day" for others
+                                    if case .weeklyTarget = task.frequency {
+                                        Text("\(task.currentStreak) week\(task.currentStreak == 1 ? "" : "s")")
+                                            .font(.caption)
+                                            .foregroundStyle(.orange)
+                                    } else {
+                                        Text("\(task.currentStreak) day\(task.currentStreak == 1 ? "" : "s")")
+                                            .font(.caption)
+                                            .foregroundStyle(.orange)
+                                    }
                                 }
                             }
 
