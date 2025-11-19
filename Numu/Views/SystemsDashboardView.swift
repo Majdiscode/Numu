@@ -39,6 +39,54 @@ struct SystemsDashboardView: View {
         return systems.filter { !$0.todaysTasks.isEmpty }.count
     }
 
+    var overallWeeklyCompletionRate: Double {
+        // Don't access systems during deletion to avoid accessing deleted objects
+        guard !isDeletingTestData else { return 0.0 }
+        guard !systems.isEmpty else { return 0.0 }
+
+        // Calculate based on total completions vs total target
+        // Example: Task1 (2/3) + Task2 (1/2) = 3/5 = 60%
+        let totalCompletions = totalWeeklyCompletions
+        let totalTarget = totalWeeklyTarget
+
+        guard totalTarget > 0 else { return 0.0 }
+
+        let rate = Double(totalCompletions) / Double(totalTarget)
+        return min(1.0, max(0.0, rate))
+    }
+
+    var totalWeeklyTasks: Int {
+        // Don't access systems during deletion to avoid accessing deleted objects
+        guard !isDeletingTestData else { return 0 }
+        return systems.reduce(0) { total, system in
+            total + system.weeklyTasks.count
+        }
+    }
+
+    var totalCompletedWeeklyTasks: Int {
+        // Don't access systems during deletion to avoid accessing deleted objects
+        guard !isDeletingTestData else { return 0 }
+        return systems.reduce(0) { total, system in
+            total + system.completedWeeklyCount
+        }
+    }
+
+    var totalWeeklyCompletions: Int {
+        // Don't access systems during deletion to avoid accessing deleted objects
+        guard !isDeletingTestData else { return 0 }
+        return systems.reduce(0) { total, system in
+            total + system.totalWeeklyCompletions
+        }
+    }
+
+    var totalWeeklyTarget: Int {
+        // Don't access systems during deletion to avoid accessing deleted objects
+        guard !isDeletingTestData else { return 0 }
+        return systems.reduce(0) { total, system in
+            total + system.totalWeeklyTarget
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -56,6 +104,11 @@ struct SystemsDashboardView: View {
                         // MARK: - Overall Progress
                         if !systems.isEmpty {
                             overallProgressCard
+                        }
+
+                        // MARK: - Weekly Progress
+                        if totalWeeklyTasks > 0 {
+                            weeklyProgressCard
                         }
 
                         // MARK: - Systems List
@@ -220,6 +273,7 @@ struct SystemsDashboardView: View {
                             HStack(spacing: 0) {
                                 RoundedRectangle(cornerRadius: 8)
                                     .frame(width: filledWidth)
+                                    .animation(.easeInOut(duration: 1.2), value: filledWidth)
                                 Spacer(minLength: 0)
                             }
                         )
@@ -295,6 +349,104 @@ struct SystemsDashboardView: View {
         )
     }
 
+    // MARK: - Weekly Progress Card
+    private var weeklyProgressCard: some View {
+        VStack(spacing: 16) {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Weekly Goals")
+                        .font(.headline)
+                        .foregroundStyle(.secondary)
+
+                    Text("\(Int(min(100, max(0, overallWeeklyCompletionRate * 100))))%")
+                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 8) {
+                    HStack(spacing: 4) {
+                        Text("\(max(0, totalWeeklyCompletions))")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                        Text("/ \(max(0, totalWeeklyTarget))")
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("completions")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            // Progress Bar
+            GeometryReader { geometry in
+                // Clamp filledWidth to valid range
+                let safeRate = min(1.0, max(0.0, overallWeeklyCompletionRate))
+                let filledWidth = max(0, min(geometry.size.width, geometry.size.width * safeRate))
+
+                ZStack(alignment: .leading) {
+                    // Background
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+
+                    // Full-width gradient layer
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(progressBarGradient)
+                        .frame(width: geometry.size.width) // FULL width
+                        .mask(
+                            // Mask to only show the filled portion from the left (with rounded end)
+                            HStack(spacing: 0) {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .frame(width: filledWidth)
+                                    .animation(.easeInOut(duration: 1.2), value: filledWidth)
+                                Spacer(minLength: 0)
+                            }
+                        )
+                }
+            }
+            .frame(height: 12)
+
+            Text(weeklyMotivationalMessage)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(20)
+        .background(
+            // Subtle gradient for depth
+            LinearGradient(
+                colors: [
+                    Color(.systemBackground),
+                    Color(.systemBackground).opacity(0.95)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .cardBorder(cornerRadius: 16, opacity: 0.1)
+        .elevation(.level2)
+    }
+
+    private var weeklyMotivationalMessage: String {
+        // Don't access systems during deletion to avoid accessing deleted objects
+        guard !isDeletingTestData else { return "Clearing test data..." }
+
+        if totalWeeklyTasks == 0 {
+            return "No weekly goals set yet"
+        } else if overallWeeklyCompletionRate == 1.0 {
+            return "All weekly goals completed! Outstanding!"
+        } else if overallWeeklyCompletionRate >= 0.75 {
+            return "Nearly there, finish strong this week"
+        } else if overallWeeklyCompletionRate >= 0.5 {
+            return "Solid progress, keep the momentum going"
+        } else if totalWeeklyCompletions == 0 {
+            return "Plenty of time left this week"
+        } else {
+            return "Every rep counts, keep going"
+        }
+    }
+
     // MARK: - Systems List
     private var systemsList: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -355,15 +507,13 @@ struct SystemCard: View {
     var body: some View {
         // Defensive: Safely get tasks and tests
         let todaysTasks: [HabitTask]
+        let weeklyTasks: [HabitTask]
         let dueTests: [PerformanceTest]
 
-        do {
-            todaysTasks = system.todaysTasks
-            dueTests = system.dueTests
-        } catch {
-            todaysTasks = []
-            dueTests = []
-        }
+        // Safe access to system properties with defensive coding
+        todaysTasks = system.todaysTasks
+        weeklyTasks = system.weeklyTasks
+        dueTests = system.dueTests
 
         return VStack(spacing: 16) {
             // Header
@@ -409,13 +559,56 @@ struct SystemCard: View {
                 }
             }
 
-            // Tasks
+            // Today's Tasks (daily/weekdays/weekends)
             if !todaysTasks.isEmpty {
-                VStack(spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "calendar")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("Today's Tasks")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.secondary)
+                    }
+
                     ForEach(todaysTasks) { task in
                         TaskRow(task: task, modelContext: modelContext)
                     }
                 }
+                .padding(12)
+                .background(Color(.systemGray6).opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color(.systemGray4).opacity(0.3), lineWidth: 1)
+                )
+            }
+
+            // Weekly Goals (weekly frequency tasks)
+            if !weeklyTasks.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "target")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("Weekly Goals")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(weeklyTasks) { task in
+                        TaskRow(task: task, modelContext: modelContext)
+                    }
+                }
+                .padding(12)
+                .background(Color(.systemGray6).opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(Color(.systemGray4).opacity(0.3), lineWidth: 1)
+                )
             }
 
             // Due Tests

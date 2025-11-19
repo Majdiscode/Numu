@@ -58,6 +58,17 @@ final class System {
         tasks?.filter { $0.isDueToday() } ?? []
     }
 
+    /// Weekly frequency tasks (not tied to specific days)
+    var weeklyTasks: [HabitTask] {
+        guard let tasks = tasks else { return [] }
+        return tasks.filter { task in
+            if case .weeklyTarget = task.frequency {
+                return true
+            }
+            return false
+        }
+    }
+
     /// Number of today's tasks that are completed
     var completedTodayCount: Int {
         todaysTasks.filter { $0.isCompletedToday() }.count
@@ -67,6 +78,39 @@ final class System {
     var todayCompletionRate: Double {
         guard !todaysTasks.isEmpty else { return 0.0 }
         return Double(completedTodayCount) / Double(todaysTasks.count)
+    }
+
+    /// Number of weekly tasks that have met their target this week
+    var completedWeeklyCount: Int {
+        guard let tasks = tasks else { return 0 }
+        return tasks.filter { task in
+            if case .weeklyTarget = task.frequency {
+                return task.weeklyTargetMet()
+            }
+            return false
+        }.count
+    }
+
+    /// Weekly goals completion rate (0.0 to 1.0)
+    var weeklyCompletionRate: Double {
+        let weekly = weeklyTasks
+        guard !weekly.isEmpty else { return 0.0 }
+        return Double(completedWeeklyCount) / Double(weekly.count)
+    }
+
+    /// Total completions for all weekly tasks this week
+    var totalWeeklyCompletions: Int {
+        weeklyTasks.reduce(0) { $0 + $1.completionsThisWeek() }
+    }
+
+    /// Total target for all weekly tasks this week
+    var totalWeeklyTarget: Int {
+        weeklyTasks.reduce(0) { total, task in
+            if case .weeklyTarget(let times) = task.frequency {
+                return total + times
+            }
+            return total
+        }
     }
 
     /// Overall system consistency since creation

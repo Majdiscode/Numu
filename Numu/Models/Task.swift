@@ -199,9 +199,11 @@ final class HabitTask {
             return weekday == 1 || weekday == 7 // Saturday or Sunday
         case .specificDays(let days):
             return days.contains(weekday)
-        case .weeklyTarget(let times):
-            // Weekly tasks are "due" every day until the weekly target is met
-            return completionsInWeek(containing: date) < times
+        case .weeklyTarget:
+            // Weekly tasks are NOT "due" on any specific day
+            // They appear in "Weekly Goals" section instead of "Today's Tasks"
+            // User chooses when to complete them within the week
+            return false
         }
     }
 
@@ -231,7 +233,16 @@ final class HabitTask {
         let weekStart = calendar.dateInterval(of: .weekOfYear, for: date)?.start ?? date
         let weekEnd = calendar.date(byAdding: .day, value: 7, to: weekStart) ?? date
 
-        return logs.filter { log in
+        // Safely filter logs, catching any access errors
+        return logs.compactMap { log -> HabitTaskLog? in
+            // Try to access the log's date - if it fails, skip this log
+            do {
+                _ = log.date
+                return log
+            } catch {
+                return nil
+            }
+        }.filter { log in
             log.date >= weekStart && log.date < weekEnd
         }.count
     }

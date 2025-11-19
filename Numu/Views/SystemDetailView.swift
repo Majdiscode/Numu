@@ -148,33 +148,77 @@ struct SystemDetailView: View {
 
     // MARK: - Tasks Section
     private var tasksSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Label("Daily Tasks", systemImage: "checkmark.square")
-                    .font(.headline)
+        VStack(alignment: .leading, spacing: 16) {
+            // Today's Tasks (daily/weekdays/weekends)
+            if !system.todaysTasks.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Label("Today's Tasks", systemImage: "calendar")
+                            .font(.headline)
 
-                Spacer()
+                        Spacer()
 
-                Text("\(system.completedTodayCount)/\(system.todaysTasks.count)")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                        Text("\(system.completedTodayCount)/\(system.todaysTasks.count)")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(system.todaysTasks) { task in
+                        TaskDetailRow(task: task, modelContext: modelContext)
+                    }
+                }
+                .padding(16)
+                .background(Color(.systemGray6).opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color(.systemGray4).opacity(0.3), lineWidth: 1)
+                )
             }
 
-            if system.tasks?.isEmpty ?? true {
-                Text("No tasks in this system yet")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding()
-            } else {
-                ForEach(system.tasks ?? []) { task in
-                    TaskDetailRow(task: task, modelContext: modelContext)
+            // Weekly Goals (weekly frequency tasks)
+            if !system.weeklyTasks.isEmpty {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        Label("Weekly Goals", systemImage: "target")
+                            .font(.headline)
+
+                        Spacer()
+
+                        // Show completion count for weekly tasks
+                        let completedWeekly = system.weeklyTasks.filter { $0.weeklyTargetMet() }.count
+                        Text("\(completedWeekly)/\(system.weeklyTasks.count) targets met")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    ForEach(system.weeklyTasks) { task in
+                        TaskDetailRow(task: task, modelContext: modelContext)
+                    }
                 }
+                .padding(16)
+                .background(Color(.systemGray6).opacity(0.5))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color(.systemGray4).opacity(0.3), lineWidth: 1)
+                )
+            }
+
+            // Empty state if no tasks at all
+            if system.todaysTasks.isEmpty && system.weeklyTasks.isEmpty {
+                VStack(spacing: 12) {
+                    Text("No tasks in this system yet")
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding()
+                }
+                .padding()
+                .background(Color(.systemBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 16))
+                .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
             }
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.05), radius: 10, x: 0, y: 4)
     }
 
     // MARK: - Tests Section
