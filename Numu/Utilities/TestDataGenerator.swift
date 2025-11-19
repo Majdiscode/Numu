@@ -30,6 +30,9 @@ struct TestDataGenerator {
         // System 4: At-Risk Streaks (demonstrates warning states)
         generateAtRiskStreaksSystem()
 
+        // System 5: Varied Weekly Patterns (demonstrates green/yellow/red weeks)
+        generateVariedWeeklyPatternsSystem()
+
         do {
             try modelContext.save()
             print("✅ [TEST DATA] Comprehensive test systems created!")
@@ -206,6 +209,109 @@ struct TestDataGenerator {
 
         print("   ⚠️ At-Risk Streaks: All tasks missed yesterday!")
         print("      Complete today or streaks will break!")
+    }
+
+    // MARK: - System 5: Varied Weekly Patterns
+    // Demonstrates: Different week colors (green/yellow/red) for calendar heat map
+
+    private func generateVariedWeeklyPatternsSystem() {
+        let system = System(
+            name: "🧪 Calendar Heat Map Demo",
+            category: .mind,
+            description: "Shows varied weekly patterns - green, yellow, and red weeks",
+            color: "#007AFF",
+            icon: "calendar"
+        )
+
+        let calendar = Calendar.current
+        // Create system 8 weeks ago to have plenty of historical data
+        if let createdDate = calendar.date(byAdding: .weekOfYear, value: -8, to: Date()) {
+            system.createdAt = createdDate
+        }
+
+        modelContext.insert(system)
+
+        // Create 3 daily tasks and 2 weekly tasks
+        let dailyTask1 = createTask(name: "📖 Daily Reading", frequency: .daily, system: system)
+        let dailyTask2 = createTask(name: "🏃 Morning Run", frequency: .daily, system: system)
+        let dailyTask3 = createTask(name: "💧 Drink Water", frequency: .daily, system: system)
+
+        let weeklyTask1 = createTask(name: "🏋️ Gym", frequency: .weeklyTarget(times: 3), system: system)
+        let weeklyTask2 = createTask(name: "🧘 Yoga", frequency: .weeklyTarget(times: 2), system: system)
+
+        // Generate varied patterns for past 8 weeks
+        // Week -8 to -7: RED weeks (0-49% completion)
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -8, dailyCompletionRate: 0.2, weeklyCompletionRate: 0.3)
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -7, dailyCompletionRate: 0.4, weeklyCompletionRate: 0.4)
+
+        // Week -6 to -5: YELLOW weeks (50-79% completion)
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -6, dailyCompletionRate: 0.6, weeklyCompletionRate: 0.6)
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -5, dailyCompletionRate: 0.7, weeklyCompletionRate: 0.7)
+
+        // Week -4 to -3: GREEN weeks (80-100% completion)
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -4, dailyCompletionRate: 0.9, weeklyCompletionRate: 0.9)
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -3, dailyCompletionRate: 1.0, weeklyCompletionRate: 1.0)
+
+        // Week -2: RED week
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -2, dailyCompletionRate: 0.3, weeklyCompletionRate: 0.2)
+
+        // Week -1: YELLOW week
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -1, dailyCompletionRate: 0.65, weeklyCompletionRate: 0.6)
+
+        // Current week (partial): GREEN trend
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: 0, dailyCompletionRate: 0.85, weeklyCompletionRate: 0.8, partialWeek: true)
+
+        print("   ✅ Calendar Heat Map: 8 weeks of varied patterns created!")
+        print("      🟢 Weeks -4, -3 (GREEN) | 🟡 Weeks -6, -5, -1 (YELLOW) | 🔴 Weeks -8, -7, -2 (RED)")
+    }
+
+    /// Generate a week with specific completion rates for daily and weekly tasks
+    private func generateVariedWeek(tasks: [HabitTask], weeklyTasks: [(task: HabitTask, target: Int)], weekOffset: Int, dailyCompletionRate: Double, weeklyCompletionRate: Double, partialWeek: Bool = false) {
+        let calendar = Calendar.current
+        let now = Date()
+
+        guard let weekStart = calendar.date(byAdding: .weekOfYear, value: weekOffset, to: now),
+              let weekInterval = calendar.dateInterval(of: .weekOfYear, for: weekStart) else {
+            return
+        }
+
+        // Daily tasks: complete based on completion rate
+        let daysToComplete = Int(Double(7) * dailyCompletionRate)
+        var completedDays = 0
+
+        for dayOffset in 0..<7 {
+            guard let date = calendar.date(byAdding: .day, value: dayOffset, to: weekInterval.start) else { continue }
+
+            // For partial weeks (current week), only go up to today
+            if partialWeek && date > now {
+                break
+            }
+
+            // Complete tasks on this day based on rate
+            if completedDays < daysToComplete {
+                for task in tasks {
+                    // Randomly skip some tasks to add variety
+                    if Double.random(in: 0...1) <= dailyCompletionRate {
+                        addCompletion(task: task, date: date)
+                    }
+                }
+                completedDays += 1
+            }
+        }
+
+        // Weekly tasks: complete based on completion rate
+        for (weeklyTask, target) in weeklyTasks {
+            let completionsNeeded = Int(Double(target) * weeklyCompletionRate)
+
+            for completion in 0..<completionsNeeded {
+                let dayOffset = (completion * 2) % 7 // Spread across the week
+                if let date = calendar.date(byAdding: .day, value: dayOffset, to: weekInterval.start) {
+                    if !partialWeek || date <= now {
+                        addCompletion(task: weeklyTask, date: date)
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - Helper: Create Task

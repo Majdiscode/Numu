@@ -21,26 +21,46 @@ struct CalendarView: View {
 
     private let calendar = Calendar.current
 
+    private var currentMonthName: String {
+        let components = calendar.dateComponents([.month], from: currentMonth)
+        guard let month = components.month else { return "" }
+        return calendar.monthSymbols[month - 1]
+    }
+
+    private var currentYearString: String {
+        let components = calendar.dateComponents([.year], from: currentMonth)
+        guard let year = components.year else { return "" }
+        return String(year)
+    }
+
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Month Navigation
-                monthNavigationHeader
+            ZStack {
+                Color(.systemGroupedBackground)
+                    .ignoresSafeArea()
 
-                // System Filter
-                if !systems.isEmpty {
-                    systemFilterPicker
-                }
+                VStack(spacing: 0) {
+                    // Month Navigation
+                    monthNavigationHeader
 
-                // Calendar Grid
-                ScrollView {
-                    VStack(spacing: 24) {
-                        calendarGrid
-
-                        // Legend
-                        legendSection
+                    // System Filter
+                    if !systems.isEmpty {
+                        systemFilterPicker
                     }
-                    .padding()
+
+                    // Calendar Grid
+                    ScrollView {
+                        VStack(spacing: 24) {
+                            calendarGrid
+                                .padding(.horizontal)
+
+                            // Legend
+                            legendSection
+                                .padding(.horizontal)
+                        }
+                        .padding(.top, 8)
+                        .padding(.bottom, 20)
+                    }
                 }
             }
             .navigationTitle("Calendar")
@@ -61,7 +81,8 @@ struct CalendarView: View {
     // MARK: - Month Navigation
 
     private var monthNavigationHeader: some View {
-        HStack {
+        HStack(spacing: 16) {
+            // Previous month button
             Button {
                 withAnimation {
                     currentMonth = calendar.date(byAdding: .month, value: -1, to: currentMonth) ?? currentMonth
@@ -69,17 +90,78 @@ struct CalendarView: View {
             } label: {
                 Image(systemName: "chevron.left")
                     .font(.title3)
+                    .fontWeight(.medium)
                     .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
             }
 
             Spacer()
 
-            Text(currentMonth, format: .dateTime.month(.wide).year())
-                .font(.title2)
-                .fontWeight(.bold)
+            // Month selector
+            Menu {
+                ForEach(calendar.monthSymbols.indices, id: \.self) { index in
+                    Button {
+                        if let newDate = calendar.date(bySetting: .month, value: index + 1, of: currentMonth) {
+                            withAnimation {
+                                currentMonth = newDate
+                            }
+                        }
+                    } label: {
+                        Text(calendar.monthSymbols[index])
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(currentMonthName)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .fixedSize()
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
+
+            // Year selector
+            Menu {
+                ForEach((2020...2030), id: \.self) { year in
+                    Button {
+                        if let newDate = calendar.date(bySetting: .year, value: year, of: currentMonth) {
+                            withAnimation {
+                                currentMonth = newDate
+                            }
+                        }
+                    } label: {
+                        Text(String(year))
+                    }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Text(currentYearString)
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+                        .fixedSize()
+                    Image(systemName: "chevron.down")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 12)
+                .background(Color(.systemGray6))
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+            }
 
             Spacer()
 
+            // Next month button
             Button {
                 withAnimation {
                     currentMonth = calendar.date(byAdding: .month, value: 1, to: currentMonth) ?? currentMonth
@@ -87,21 +169,13 @@ struct CalendarView: View {
             } label: {
                 Image(systemName: "chevron.right")
                     .font(.title3)
+                    .fontWeight(.medium)
                     .foregroundStyle(.primary)
+                    .frame(width: 44, height: 44)
             }
-
-            Button {
-                withAnimation {
-                    currentMonth = Date()
-                }
-            } label: {
-                Text("Today")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-            }
-            .buttonStyle(.bordered)
         }
-        .padding()
+        .padding(.horizontal, 20)
+        .padding(.vertical, 16)
     }
 
     // MARK: - System Filter
@@ -154,64 +228,77 @@ struct CalendarView: View {
         VStack(spacing: 0) {
             // Weekday headers
             HStack(spacing: 0) {
-                ForEach(calendar.shortWeekdaySymbols, id: \.self) { day in
+                ForEach(calendar.veryShortWeekdaySymbols, id: \.self) { day in
                     Text(day)
-                        .font(.caption)
-                        .fontWeight(.semibold)
+                        .font(.system(size: 14))
+                        .fontWeight(.medium)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.bottom, 8)
+            .padding(.bottom, 16)
+            .padding(.top, 8)
 
             // Weeks
             ForEach(weeksInMonth, id: \.self) { week in
                 weekRow(weekStart: week)
             }
         }
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 
     private func weekRow(weekStart: Date) -> some View {
         let weekColor = weekBackgroundColor(for: weekStart)
 
-        return VStack(spacing: 4) {
+        return VStack(spacing: 0) {
             HStack(spacing: 0) {
                 ForEach(daysInWeek(weekStart: weekStart), id: \.self) { date in
                     dayCell(date: date)
                 }
             }
-            .padding(.vertical, 12)
-            .background(weekColor.opacity(0.15))
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .padding(.vertical, 8)
+            .background(weekColor != .clear && weekColor != .gray ? weekColor.opacity(0.25) : Color.clear)
+            .clipShape(Capsule())
             .onTapGesture {
                 selectedWeekStart = weekStart
                 showWeekSummary = true
             }
         }
-        .padding(.bottom, 8)
+        .padding(.bottom, 4)
     }
 
     private func dayCell(date: Date) -> some View {
         let isCurrentMonth = calendar.isDate(date, equalTo: currentMonth, toGranularity: .month)
         let isToday = calendar.isDateInToday(date)
+        let isSelected = selectedDate != nil && calendar.isDate(date, equalTo: selectedDate!, toGranularity: .day)
         let dayColor = dayCircleColor(for: date)
+        let showIndicator = dayColor != .clear
 
         return Button {
             selectedDate = date
             showDayDetail = true
         } label: {
-            VStack(spacing: 4) {
+            VStack(spacing: 6) {
                 Text(date, format: .dateTime.day())
-                    .font(.subheadline)
-                    .fontWeight(isToday ? .bold : .regular)
-                    .foregroundStyle(isCurrentMonth ? .primary : .secondary)
+                    .font(.system(size: 16))
+                    .fontWeight(isToday ? .semibold : .regular)
+                    .foregroundStyle(isSelected ? .primary : (isCurrentMonth ? .primary : .tertiary))
 
-                Circle()
-                    .fill(dayColor)
-                    .frame(width: 8, height: 8)
+                if showIndicator {
+                    Circle()
+                        .fill(dayColor)
+                        .frame(width: 6, height: 6)
+                } else {
+                    Circle()
+                        .fill(Color.clear)
+                        .frame(width: 6, height: 6)
+                }
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 4)
+            .frame(height: 50)
+            .background(isSelected ? Color(.systemBackground) : Color.clear)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
     }
@@ -333,40 +420,48 @@ struct CalendarView: View {
 
         var totalTasks = 0
         var completedTasks = 0
+        var hasTasksOnThisDay = false
 
         for system in filteredSystems {
             guard let tasks = system.tasks else { continue }
 
             for task in tasks {
-                // Only count daily tasks (not weekly)
-                if task.shouldBeCompletedOn(date: startOfDay) {
-                    totalTasks += 1
-                    if task.wasCompletedOn(date: startOfDay) {
-                        completedTasks += 1
+                // Check if this task existed on this day
+                let taskCreationDate = calendar.startOfDay(for: task.createdAt)
+
+                // Only count tasks that were created on or before this day
+                if taskCreationDate <= startOfDay {
+                    // Only count daily tasks (not weekly)
+                    if task.shouldBeCompletedOn(date: startOfDay) {
+                        hasTasksOnThisDay = true
+                        totalTasks += 1
+                        if task.wasCompletedOn(date: startOfDay) {
+                            completedTasks += 1
+                        }
                     }
                 }
             }
         }
 
-        // No tasks due that day
-        if totalTasks == 0 {
-            return .gray.opacity(0.3)
+        // No tasks existed or were due that day
+        if !hasTasksOnThisDay || totalTasks == 0 {
+            return .clear
         }
 
         let completionRate = Double(completedTasks) / Double(totalTasks)
 
         if completionRate >= 0.8 {
-            return .green
+            return Color(red: 0.2, green: 0.8, blue: 0.3)  // Brighter green
         } else if completionRate >= 0.5 {
-            return .yellow
+            return Color(red: 1.0, green: 0.8, blue: 0.0)  // Brighter yellow
         } else {
-            return .red
+            return Color(red: 1.0, green: 0.3, blue: 0.3)  // Brighter red
         }
     }
 
     private func weekBackgroundColor(for weekStart: Date) -> Color {
         guard let weekInterval = calendar.dateInterval(of: .weekOfYear, for: weekStart) else {
-            return .gray
+            return .clear
         }
 
         // Check if week is in the future
@@ -376,6 +471,7 @@ struct CalendarView: View {
 
         var totalWeeklyTargets = 0
         var completedWeeklyTargets = 0
+        var hasTasksInThisWeek = false
 
         for system in filteredSystems {
             guard let tasks = system.tasks else { continue }
@@ -383,26 +479,33 @@ struct CalendarView: View {
             for task in tasks {
                 // Only count weekly tasks
                 if case .weeklyTarget(let times) = task.frequency {
-                    totalWeeklyTargets += times
-                    let completions = task.completionsInWeek(containing: weekStart)
-                    completedWeeklyTargets += min(completions, times)
+                    // Check if this task existed during this week
+                    let taskCreationDate = calendar.startOfDay(for: task.createdAt)
+
+                    // Only count this task if it was created before or during this week
+                    if taskCreationDate <= weekInterval.end {
+                        hasTasksInThisWeek = true
+                        totalWeeklyTargets += times
+                        let completions = task.completionsInWeek(containing: weekStart)
+                        completedWeeklyTargets += min(completions, times)
+                    }
                 }
             }
         }
 
-        // No weekly goals
-        if totalWeeklyTargets == 0 {
-            return .gray
+        // No weekly goals existed during this week
+        if !hasTasksInThisWeek || totalWeeklyTargets == 0 {
+            return .clear
         }
 
         let completionRate = Double(completedWeeklyTargets) / Double(totalWeeklyTargets)
 
         if completionRate >= 0.8 {
-            return .green
+            return Color(red: 0.2, green: 0.8, blue: 0.3)  // Brighter green
         } else if completionRate >= 0.5 {
-            return .yellow
+            return Color(red: 1.0, green: 0.8, blue: 0.0)  // Brighter yellow
         } else {
-            return .red
+            return Color(red: 1.0, green: 0.3, blue: 0.3)  // Brighter red
         }
     }
 }

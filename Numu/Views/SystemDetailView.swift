@@ -29,6 +29,33 @@ struct SystemDetailView: View {
             )
         }
 
+        // Safety check: if system.tasks is nil, show error state
+        if system.tasks == nil {
+            return AnyView(
+                VStack(spacing: 16) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.orange)
+
+                    Text("Unable to load system data")
+                        .font(.headline)
+
+                    Text("This system may have been corrupted. Try deleting and recreating it.")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 32)
+
+                    Button("Go Back") {
+                        dismiss()
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+                .padding()
+                .navigationTitle("Error")
+            )
+        }
+
         return AnyView(ScrollView {
             VStack(spacing: 24) {
                 // MARK: - System Header
@@ -111,18 +138,24 @@ struct SystemDetailView: View {
 
     // MARK: - Key Stats
     private var keyStats: some View {
-        VStack(spacing: 16) {
+        // Defensive: Calculate stats safely to prevent crashes
+        let todayRate = (system.tasks != nil) ? system.todayCompletionRate : 0.0
+        let streak = (system.tasks != nil) ? system.currentStreak : 0
+        let consistency = (system.tasks != nil) ? system.overallConsistency : 0.0
+        let testsCount = system.tests?.count ?? 0
+
+        return VStack(spacing: 16) {
             HStack(spacing: 16) {
                 SystemStatCard(
                     title: "Today",
-                    value: "\(Int(system.todayCompletionRate * 100))%",
+                    value: "\(Int(max(0, min(100, todayRate * 100))))%",
                     icon: "checkmark.circle.fill",
                     color: .green
                 )
 
                 SystemStatCard(
                     title: "Streak",
-                    value: "\(system.currentStreak)",
+                    value: "\(max(0, streak))",
                     icon: "flame.fill",
                     color: .orange
                 )
@@ -131,14 +164,14 @@ struct SystemDetailView: View {
             HStack(spacing: 16) {
                 SystemStatCard(
                     title: "Consistency",
-                    value: "\(Int(system.overallConsistency * 100))%",
+                    value: "\(Int(max(0, min(100, consistency * 100))))%",
                     icon: "chart.line.uptrend.xyaxis",
                     color: .blue
                 )
 
                 SystemStatCard(
                     title: "Active Tests",
-                    value: "\(system.tests?.count ?? 0)",
+                    value: "\(max(0, testsCount))",
                     icon: "chart.bar.fill",
                     color: .purple
                 )
@@ -148,9 +181,24 @@ struct SystemDetailView: View {
 
     // MARK: - Tasks Section
     private var tasksSection: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        // Defensive: Safely get tasks to prevent crashes
+        let todaysTasks = (system.tasks != nil) ? system.todaysTasks : []
+        let weeklyTasks = (system.tasks != nil) ? system.weeklyTasks : []
+        let completedToday = (system.tasks != nil) ? system.completedTodayCount : 0
+
+        // Defensive: Safely calculate weekly completions
+        let completedWeekly = weeklyTasks.filter { task in
+            // Safely check if target is met, ensure logs exist
+            guard case .weeklyTarget = task.frequency,
+                  task.logs != nil else {
+                return false
+            }
+            return task.weeklyTargetMet()
+        }.count
+
+        return VStack(alignment: .leading, spacing: 16) {
             // Today's Tasks (daily/weekdays/weekends)
-            if !system.todaysTasks.isEmpty {
+            if !todaysTasks.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Label("Today's Tasks", systemImage: "calendar")
@@ -158,26 +206,26 @@ struct SystemDetailView: View {
 
                         Spacer()
 
-                        Text("\(system.completedTodayCount)/\(system.todaysTasks.count)")
+                        Text("\(completedToday)/\(todaysTasks.count)")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
 
-                    ForEach(system.todaysTasks) { task in
+                    ForEach(todaysTasks) { task in
                         TaskDetailRow(task: task, modelContext: modelContext)
                     }
                 }
                 .padding(16)
-                .background(Color(.systemGray6).opacity(0.5))
+                .background(Color(.systemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(.systemGray4).opacity(0.3), lineWidth: 1)
+                        .stroke(Color(.separator).opacity(0.2), lineWidth: 1)
                 )
             }
 
             // Weekly Goals (weekly frequency tasks)
-            if !system.weeklyTasks.isEmpty {
+            if !weeklyTasks.isEmpty {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
                         Label("Weekly Goals", systemImage: "target")
@@ -185,28 +233,26 @@ struct SystemDetailView: View {
 
                         Spacer()
 
-                        // Show completion count for weekly tasks
-                        let completedWeekly = system.weeklyTasks.filter { $0.weeklyTargetMet() }.count
-                        Text("\(completedWeekly)/\(system.weeklyTasks.count) targets met")
+                        Text("\(completedWeekly)/\(weeklyTasks.count) targets met")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                     }
 
-                    ForEach(system.weeklyTasks) { task in
+                    ForEach(weeklyTasks) { task in
                         TaskDetailRow(task: task, modelContext: modelContext)
                     }
                 }
                 .padding(16)
-                .background(Color(.systemGray6).opacity(0.5))
+                .background(Color(.systemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(
                     RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color(.systemGray4).opacity(0.3), lineWidth: 1)
+                        .stroke(Color(.separator).opacity(0.2), lineWidth: 1)
                 )
             }
 
             // Empty state if no tasks at all
-            if system.todaysTasks.isEmpty && system.weeklyTasks.isEmpty {
+            if todaysTasks.isEmpty && weeklyTasks.isEmpty {
                 VStack(spacing: 12) {
                     Text("No tasks in this system yet")
                         .foregroundStyle(.secondary)

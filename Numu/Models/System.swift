@@ -161,30 +161,52 @@ final class System {
     // MARK: - Helper Methods
 
     private func calculateStreak() -> Int {
-        guard let tasks = tasks else { return 0 }
+        guard let tasks = tasks, !tasks.isEmpty else { return 0 }
 
+        let calendar = Calendar.current
         var streak = 0
-        var currentDate = Calendar.current.startOfDay(for: Date())
+        var currentDate = calendar.startOfDay(for: Date())
 
-        while true {
+        // Safety: Don't go back further than system creation date or 365 days
+        let earliestDate = calendar.date(byAdding: .day, value: -365, to: Date()) ?? createdAt
+        let systemStart = calendar.startOfDay(for: createdAt)
+        let stopDate = max(earliestDate, systemStart)
+
+        var daysChecked = 0
+        let maxDaysToCheck = 365
+
+        while currentDate >= stopDate && daysChecked < maxDaysToCheck {
+            daysChecked += 1
+
             // Check if all tasks due on this date were completed
             let tasksForDate = tasks.filter { task in
-                task.shouldBeCompletedOn(date: currentDate)
+                // Only check tasks that existed on this date
+                guard calendar.startOfDay(for: task.createdAt) <= currentDate else {
+                    return false
+                }
+                return task.shouldBeCompletedOn(date: currentDate)
             }
 
-            // If there are no tasks for this date, or not all were completed, break
+            // If no tasks for this date, skip to previous day
             guard !tasksForDate.isEmpty else {
-                currentDate = Calendar.current.date(byAdding: .day, value: -1, to: currentDate)!
+                guard let previousDate = calendar.date(byAdding: .day, value: -1, to: currentDate) else {
+                    break
+                }
+                currentDate = previousDate
                 continue
             }
 
+            // Check if all tasks were completed
             let allCompleted = tasksForDate.allSatisfy { task in
                 task.wasCompletedOn(date: currentDate)
             }
 
             if allCompleted {
                 streak += 1
-                currentDate = Calendar.current.date(byAdding: .day, value: -1, to: currentDate)!
+                guard let previousDate = calendar.date(byAdding: .day, value: -1, to: currentDate) else {
+                    break
+                }
+                currentDate = previousDate
             } else {
                 break
             }
@@ -208,14 +230,14 @@ enum SystemCategory: String, Codable, CaseIterable {
 
     var systemIcon: String {
         switch self {
-        case .athletics: return "figure.run"
-        case .health: return "heart.fill"
-        case .mind: return "brain.head.profile"
-        case .work: return "briefcase.fill"
-        case .relationships: return "person.2.fill"
-        case .creativity: return "paintbrush.fill"
-        case .learning: return "book.fill"
-        case .lifestyle: return "house.fill"
+        case .athletics: return "flame.fill"           // Alternative: "figure.run", "bolt.fill", "dumbbell.fill"
+        case .health: return "heart.circle.fill"       // Alternative: "heart.fill", "cross.circle.fill", "leaf.fill"
+        case .mind: return "brain.fill"                // Alternative: "brain.head.profile", "lightbulb.fill", "sparkles"
+        case .work: return "square.stack.3d.up.fill"   // Alternative: "briefcase.fill", "chart.line.uptrend.xyaxis", "target"
+        case .relationships: return "heart.2.fill"     // Alternative: "person.2.fill", "hands.sparkles.fill", "bubble.left.and.bubble.right.fill"
+        case .creativity: return "wand.and.stars"      // Alternative: "paintbrush.fill", "camera.fill", "pencil.and.scribble"
+        case .learning: return "graduationcap.fill"    // Alternative: "book.fill", "text.book.closed.fill", "brain.fill"
+        case .lifestyle: return "sparkles"             // Alternative: "house.fill", "sun.horizon.fill", "leaf.fill"
         }
     }
 

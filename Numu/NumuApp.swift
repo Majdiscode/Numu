@@ -32,6 +32,8 @@ struct NumuApp: App {
             print("      - HabitTaskLog.self")
             print("      - PerformanceTest.self")
             print("      - PerformanceTestEntry.self")
+            print("      - Achievement.self")
+            print("      - UserProgress.self")
             print("")
             print("    ☁️ CloudKit Configuration:")
             print("       - Container ID: iCloud.com.majdiskandarani.Numu.v2")
@@ -46,7 +48,9 @@ struct NumuApp: App {
                 HabitTask.self,
                 HabitTaskLog.self,
                 PerformanceTest.self,
-                PerformanceTestEntry.self
+                PerformanceTestEntry.self,
+                Achievement.self,
+                UserProgress.self
             ])
             print("✅ Schema created with \(schema.entities.count) entities")
 

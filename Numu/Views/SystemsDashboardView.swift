@@ -560,6 +560,8 @@ struct SystemCard: View {
     let system: System
     let modelContext: ModelContext
 
+    @State private var completionRate: Double = 0.0
+
     var body: some View {
         // Defensive: Safely get tasks and tests
         let todaysTasks: [HabitTask]
@@ -596,8 +598,7 @@ struct SystemCard: View {
 
                 Spacer()
 
-                // Completion indicator - defensive calculation
-                let completionRate = (try? system.todayCompletionRate) ?? 0.0
+                // Completion indicator
                 ZStack {
                     Circle()
                         .stroke(Color.gray.opacity(0.2), lineWidth: 4)
@@ -608,11 +609,23 @@ struct SystemCard: View {
                         .stroke(Color(hex: system.color), lineWidth: 4)
                         .frame(width: 44, height: 44)
                         .rotationEffect(.degrees(-90))
+                        .animation(.spring(response: 0.5), value: completionRate)
 
                     Text("\(Int(max(0, min(100, completionRate * 100))))")
                         .font(.caption2)
                         .fontWeight(.bold)
                 }
+            }
+            .onAppear {
+                updateCompletionRate()
+            }
+            .onChange(of: system.tasks?.count ?? 0) { _, _ in
+                // Update when tasks change
+                updateCompletionRate()
+            }
+            .onChange(of: todaysTasks.map { $0.isCompletedToday() }) { _, _ in
+                // Update when any task completion changes
+                updateCompletionRate()
             }
 
             // Today's Tasks (daily/weekdays/weekends)
@@ -633,11 +646,11 @@ struct SystemCard: View {
                     }
                 }
                 .padding(12)
-                .background(Color(.systemGray6).opacity(0.5))
+                .background(Color(.systemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(.systemGray4).opacity(0.3), lineWidth: 1)
+                        .stroke(Color(.separator).opacity(0.2), lineWidth: 1)
                 )
             }
 
@@ -659,11 +672,11 @@ struct SystemCard: View {
                     }
                 }
                 .padding(12)
-                .background(Color(.systemGray6).opacity(0.5))
+                .background(Color(.systemBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
                 .overlay(
                     RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(.systemGray4).opacity(0.3), lineWidth: 1)
+                        .stroke(Color(.separator).opacity(0.2), lineWidth: 1)
                 )
             }
 
@@ -680,6 +693,15 @@ struct SystemCard: View {
             }
         }
         .elevatedCard(elevation: .level1, cornerRadius: 16, padding: 16)
+    }
+
+    private func updateCompletionRate() {
+        // Safely calculate completion rate
+        if system.tasks != nil {
+            completionRate = system.todayCompletionRate
+        } else {
+            completionRate = 0.0
+        }
     }
 }
 

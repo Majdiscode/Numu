@@ -275,7 +275,7 @@ final class HabitTask {
     /// Check if task is over weekly target (for gray-out display)
     func isOverWeeklyTarget() -> Bool {
         guard case .weeklyTarget(let times) = frequency else { return false }
-        return completionsThisWeek() >= times
+        return completionsThisWeek() > times  // Only over if EXCEEDS target, not meets it
     }
 
     /// Get weekly progress display (e.g., "2/3 this week")
