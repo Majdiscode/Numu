@@ -171,6 +171,25 @@ final class HabitTask {
         calculateLongestStreak()
     }
 
+    /// Check if streak is "at risk" (one day already missed, next miss breaks it)
+    var isStreakAtRisk: Bool {
+        // For weekly tasks, check if we missed last week
+        if case .weeklyTarget(let times) = frequency {
+            let calendar = Calendar.current
+            guard let lastWeek = calendar.date(byAdding: .weekOfYear, value: -1, to: Date()) else { return false }
+            let lastWeekCompletions = completionsInWeek(containing: lastWeek)
+            return lastWeekCompletions < times
+        }
+
+        // For daily tasks, check if we missed yesterday (and task was due)
+        let calendar = Calendar.current
+        guard let yesterday = calendar.date(byAdding: .day, value: -1, to: Date()) else { return false }
+        let yesterdayStart = calendar.startOfDay(for: yesterday)
+
+        // Only at risk if task was due yesterday and we missed it
+        return shouldBeCompletedOn(date: yesterdayStart) && !wasCompletedOn(date: yesterdayStart)
+    }
+
     /// Overall completion rate since creation
     var completionRate: Double {
         let daysSinceCreation = Calendar.current.dateComponents([.day], from: createdAt, to: Date()).day ?? 0
@@ -274,19 +293,44 @@ final class HabitTask {
             return calculateWeeklyStreak(targetTimes: times)
         }
 
-        // For daily/specific day frequencies, count consecutive days
-        let sortedLogs = logs.sorted { $0.date > $1.date }
+        // For daily/specific day frequencies, apply "Never Miss Twice" rule
+        // One missed day is allowed, but two consecutive missed days breaks the streak
+        let calendar = Calendar.current
         var streak = 0
-        var currentDate = Calendar.current.startOfDay(for: Date())
+        var consecutiveMisses = 0
+        var currentDate = calendar.startOfDay(for: Date())
 
-        for log in sortedLogs {
-            let logDate = Calendar.current.startOfDay(for: log.date)
-            if logDate == currentDate {
-                streak += 1
-                currentDate = Calendar.current.date(byAdding: .day, value: -1, to: currentDate)!
-            } else {
+        // Go backwards from today, checking only days when task was due
+        while true {
+            // Only check days where this task should have been completed
+            if shouldBeCompletedOn(date: currentDate) {
+                if wasCompletedOn(date: currentDate) {
+                    // Completed: add to streak, reset miss counter
+                    streak += 1
+                    consecutiveMisses = 0
+                } else {
+                    // Missed: increment miss counter
+                    consecutiveMisses += 1
+
+                    // Break if we've missed twice in a row
+                    if consecutiveMisses >= 2 {
+                        break
+                    }
+                    // If only one miss, allow it and continue checking
+                }
+            }
+
+            // Move to previous day
+            guard let previousDate = calendar.date(byAdding: .day, value: -1, to: currentDate) else {
                 break
             }
+
+            // Stop if we've gone back before the task was created
+            if previousDate < calendar.startOfDay(for: createdAt) {
+                break
+            }
+
+            currentDate = previousDate
         }
 
         return streak

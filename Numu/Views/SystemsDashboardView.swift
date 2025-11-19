@@ -738,18 +738,26 @@ struct TaskRow: View {
 
             if task.currentStreak > 0 {
                 HStack(spacing: 4) {
-                    Image(systemName: "flame.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.orange)
+                    // Show warning icon if streak is at risk (one miss already)
+                    if task.isStreakAtRisk {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.yellow)
+                    } else {
+                        Image(systemName: "flame.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
+                    }
+
                     // Show week/day based on frequency type
                     if case .weeklyTarget = task.frequency {
                         Text("\(task.currentStreak)w")
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(task.isStreakAtRisk ? .yellow : .orange)
                     } else {
                         Text("\(task.currentStreak)")
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                            .foregroundStyle(task.isStreakAtRisk ? .yellow : .orange)
                     }
                 }
             }
