@@ -15,6 +15,10 @@ struct SystemsDashboardView: View {
     @State private var showCreateSystem = false
     @State private var cloudKitService = CloudKitService()
     @State private var isDeletingTestData = false
+    @State private var showCelebration = false
+    @State private var showWeeklyCelebration = false
+    @State private var previousCompletionRate: Double = 0
+    @State private var previousWeeklyCompletionRate: Double = 0
 
     #if DEBUG
     @State private var showDebugMenu = false
@@ -87,6 +91,33 @@ struct SystemsDashboardView: View {
         }
     }
 
+    // MARK: - Celebration
+    private func triggerCelebration(isWeekly: Bool = false) {
+        // Haptic feedback
+        let generator = UINotificationFeedbackGenerator()
+        generator.notificationOccurred(.success)
+
+        // Show confetti animation
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+            if isWeekly {
+                showWeeklyCelebration = true
+            } else {
+                showCelebration = true
+            }
+        }
+
+        // Hide after animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            withAnimation {
+                if isWeekly {
+                    showWeeklyCelebration = false
+                } else {
+                    showCelebration = false
+                }
+            }
+        }
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -137,6 +168,17 @@ struct SystemsDashboardView: View {
                             .foregroundStyle(.white)
                             .font(.headline)
                     }
+                }
+
+                // Celebration overlays
+                if showCelebration {
+                    CelebrationView(isWeekly: false)
+                        .allowsHitTesting(false)
+                }
+
+                if showWeeklyCelebration {
+                    CelebrationView(isWeekly: true)
+                        .allowsHitTesting(false)
                 }
             }
             .navigationTitle("Systems")
@@ -237,6 +279,13 @@ struct SystemsDashboardView: View {
 
                     Text("\(Int(overallCompletionRate * 100))%")
                         .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .onChange(of: overallCompletionRate) { oldValue, newValue in
+                            // Trigger celebration when reaching 100%
+                            if newValue == 1.0 && oldValue < 1.0 && !systems.isEmpty {
+                                triggerCelebration()
+                            }
+                            previousCompletionRate = newValue
+                        }
                 }
 
                 Spacer()
@@ -273,7 +322,7 @@ struct SystemsDashboardView: View {
                             HStack(spacing: 0) {
                                 RoundedRectangle(cornerRadius: 8)
                                     .frame(width: filledWidth)
-                                    .animation(.easeInOut(duration: 1.2), value: filledWidth)
+                                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: filledWidth)
                                 Spacer(minLength: 0)
                             }
                         )
@@ -360,6 +409,13 @@ struct SystemsDashboardView: View {
 
                     Text("\(Int(min(100, max(0, overallWeeklyCompletionRate * 100))))%")
                         .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .onChange(of: overallWeeklyCompletionRate) { oldValue, newValue in
+                            // Trigger celebration when reaching 100%
+                            if newValue == 1.0 && oldValue < 1.0 && totalWeeklyTasks > 0 {
+                                triggerCelebration(isWeekly: true)
+                            }
+                            previousWeeklyCompletionRate = newValue
+                        }
                 }
 
                 Spacer()
@@ -398,7 +454,7 @@ struct SystemsDashboardView: View {
                             HStack(spacing: 0) {
                                 RoundedRectangle(cornerRadius: 8)
                                     .frame(width: filledWidth)
-                                    .animation(.easeInOut(duration: 1.2), value: filledWidth)
+                                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: filledWidth)
                                 Spacer(minLength: 0)
                             }
                         )
@@ -746,5 +802,100 @@ struct TaskRow: View {
                 print("Error toggling task: \(error)")
             }
         }
+    }
+}
+
+// MARK: - Celebration View
+struct CelebrationView: View {
+    let isWeekly: Bool
+    @State private var isAnimating = false
+
+    private var celebrationEmoji: String {
+        isWeekly ? "🏆" : "🎉"
+    }
+
+    private var celebrationTitle: String {
+        isWeekly ? "Week Complete!" : "All Done!"
+    }
+
+    private var celebrationMessage: String {
+        isWeekly ? "You crushed all your weekly goals!" : "You completed all your tasks today!"
+    }
+
+    var body: some View {
+        ZStack {
+            ForEach(0..<30, id: \.self) { index in
+                ConfettiPiece(index: index)
+            }
+
+            // Success message
+            VStack(spacing: 16) {
+                Text(celebrationEmoji)
+                    .font(.system(size: 80))
+                    .scaleEffect(isAnimating ? 1.2 : 0.5)
+                    .opacity(isAnimating ? 1.0 : 0.0)
+
+                Text(celebrationTitle)
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.primary)
+                    .scaleEffect(isAnimating ? 1.0 : 0.5)
+                    .opacity(isAnimating ? 1.0 : 0.0)
+
+                Text(celebrationMessage)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .opacity(isAnimating ? 1.0 : 0.0)
+            }
+            .padding(32)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 20))
+            .shadow(color: .black.opacity(0.2), radius: 20)
+        }
+        .onAppear {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+                isAnimating = true
+            }
+        }
+    }
+}
+
+struct ConfettiPiece: View {
+    let index: Int
+    @State private var animate = false
+
+    private var randomX: CGFloat {
+        CGFloat.random(in: -200...200)
+    }
+
+    private var randomRotation: Double {
+        Double.random(in: 0...360)
+    }
+
+    private var randomDelay: Double {
+        Double.random(in: 0...0.3)
+    }
+
+    private var confettiColors: [Color] {
+        [.red, .orange, .yellow, .green, .blue, .purple, .pink]
+    }
+
+    private var randomColor: Color {
+        confettiColors.randomElement() ?? .blue
+    }
+
+    var body: some View {
+        Circle()
+            .fill(randomColor)
+            .frame(width: 10, height: 10)
+            .offset(x: animate ? randomX : 0, y: animate ? 800 : -100)
+            .rotationEffect(.degrees(animate ? randomRotation * 4 : randomRotation))
+            .opacity(animate ? 0 : 1)
+            .onAppear {
+                withAnimation(.easeOut(duration: 2.5).delay(randomDelay)) {
+                    animate = true
+                }
+            }
     }
 }
