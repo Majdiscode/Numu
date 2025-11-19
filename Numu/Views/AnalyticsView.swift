@@ -271,13 +271,33 @@ struct AnalyticsView: View {
                 guard let tasks = system.tasks else { continue }
 
                 for task in tasks {
-                    // Check if task was due on this day
+                    // Daily tasks: Check if due on this specific day
                     if task.shouldBeCompletedOn(date: startOfDay) {
                         totalTasksDue += 1
-
-                        // Check if task was completed on this day
                         if task.wasCompletedOn(date: startOfDay) {
                             totalCompleted += 1
+                        }
+                    }
+                    // Weekly tasks: Count progress for the week containing this date
+                    else if case .weeklyTarget(let times) = task.frequency {
+                        // Get the week interval for this date
+                        guard let weekInterval = calendar.dateInterval(of: .weekOfYear, for: startOfDay) else { continue }
+
+                        // Only count weekly tasks once per week (on the last day shown in range for that week)
+                        // Check if this is the last day of the week OR the last day in our range for this week
+                        let isLastDayOfWeek = calendar.isDate(startOfDay, inSameDayAs: weekInterval.end.addingTimeInterval(-1))
+                        let isLastDayInRangeForWeek = dayOffset == 0 || {
+                            guard let nextDate = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return false }
+                            let nextWeekInterval = calendar.dateInterval(of: .weekOfYear, for: nextDate)
+                            return nextWeekInterval != weekInterval
+                        }()
+
+                        if isLastDayOfWeek || isLastDayInRangeForWeek {
+                            // Count this weekly task's target
+                            totalTasksDue += times
+                            // Count actual completions in this week
+                            let completions = task.completionsInWeek(containing: startOfDay)
+                            totalCompleted += min(completions, times) // Cap at target
                         }
                     }
                 }
@@ -449,10 +469,28 @@ struct SystemCompletionChart: View {
             var tasksCompleted = 0
 
             for task in tasks {
+                // Daily tasks
                 if task.shouldBeCompletedOn(date: startOfDay) {
                     tasksDue += 1
                     if task.wasCompletedOn(date: startOfDay) {
                         tasksCompleted += 1
+                    }
+                }
+                // Weekly tasks: Count once per week
+                else if case .weeklyTarget(let times) = task.frequency {
+                    guard let weekInterval = calendar.dateInterval(of: .weekOfYear, for: startOfDay) else { continue }
+
+                    let isLastDayOfWeek = calendar.isDate(startOfDay, inSameDayAs: weekInterval.end.addingTimeInterval(-1))
+                    let isLastDayInRangeForWeek = dayOffset == 0 || {
+                        guard let nextDate = calendar.date(byAdding: .day, value: 1, to: startOfDay) else { return false }
+                        let nextWeekInterval = calendar.dateInterval(of: .weekOfYear, for: nextDate)
+                        return nextWeekInterval != weekInterval
+                    }()
+
+                    if isLastDayOfWeek || isLastDayInRangeForWeek {
+                        tasksDue += times
+                        let completions = task.completionsInWeek(containing: startOfDay)
+                        tasksCompleted += min(completions, times)
                     }
                 }
             }
@@ -550,14 +588,29 @@ struct TaskAnalyticsRow: View {
         var tasksDue = 0
         var tasksCompleted = 0
 
-        for dayOffset in 0..<daysToShow {
-            guard let date = calendar.date(byAdding: .day, value: -dayOffset, to: now) else { continue }
-            let startOfDay = calendar.startOfDay(for: date)
+        // For weekly tasks, count per week instead of per day
+        if case .weeklyTarget(let times) = task.frequency {
+            // Calculate number of weeks in the time range
+            let weeksToShow = max(1, daysToShow / 7)
 
-            if task.shouldBeCompletedOn(date: startOfDay) {
-                tasksDue += 1
-                if task.wasCompletedOn(date: startOfDay) {
-                    tasksCompleted += 1
+            for weekOffset in 0..<weeksToShow {
+                guard let weekDate = calendar.date(byAdding: .weekOfYear, value: -weekOffset, to: now) else { continue }
+
+                tasksDue += times
+                let completions = task.completionsInWeek(containing: weekDate)
+                tasksCompleted += min(completions, times)
+            }
+        } else {
+            // Daily tasks: count per day
+            for dayOffset in 0..<daysToShow {
+                guard let date = calendar.date(byAdding: .day, value: -dayOffset, to: now) else { continue }
+                let startOfDay = calendar.startOfDay(for: date)
+
+                if task.shouldBeCompletedOn(date: startOfDay) {
+                    tasksDue += 1
+                    if task.wasCompletedOn(date: startOfDay) {
+                        tasksCompleted += 1
+                    }
                 }
             }
         }
