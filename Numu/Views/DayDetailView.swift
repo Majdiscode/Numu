@@ -16,6 +16,12 @@ struct DayDetailView: View {
 
     private let calendar = Calendar.current
 
+    private var formattedDate: String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .long
+        return formatter.string(from: date)
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -32,7 +38,7 @@ struct DayDetailView: View {
                 }
                 .padding()
             }
-            .navigationTitle(date, format: .dateTime.month().day().year())
+            .navigationTitle(formattedDate)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -209,7 +215,7 @@ struct SystemTasksSection: View {
             // Tasks
             VStack(spacing: 8) {
                 ForEach(tasks) { task in
-                    TaskDetailRow(task: task, date: date)
+                    CalendarTaskRow(task: task, date: date)
                 }
             }
         }
@@ -234,9 +240,9 @@ struct SystemTasksSection: View {
     }
 }
 
-// MARK: - Task Detail Row
+// MARK: - Calendar Task Row
 
-struct TaskDetailRow: View {
+struct CalendarTaskRow: View {
     let task: HabitTask
     let date: Date
 
