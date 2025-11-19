@@ -33,29 +33,15 @@ struct DebugMenuView: View {
 
                 Section {
                     Button {
-                        generateBasicTestData()
+                        generateTestData()
                     } label: {
-                        Label("Generate Test System (30 days)", systemImage: "testtube.2")
-                    }
-                    .disabled(generatingData)
-
-                    Button {
-                        generateMultipleTestSystems()
-                    } label: {
-                        Label("Generate Multiple Systems", systemImage: "square.stack.3d.up")
-                    }
-                    .disabled(generatingData)
-
-                    Button {
-                        generate7DaysData()
-                    } label: {
-                        Label("Generate 7 Days (Quick Test)", systemImage: "calendar")
+                        Label("Generate Test Data", systemImage: "testtube.2")
                     }
                     .disabled(generatingData)
                 } header: {
                     Label("Generate Test Data", systemImage: "wand.and.stars")
                 } footer: {
-                    Text("Creates fake systems with 🧪 emoji for testing analytics and features")
+                    Text("Creates 4 test systems showcasing all features:\n• Perfect Athlete (100% celebration)\n• Never Miss Twice (streak grace days)\n• Weekly Goals (progress tracking)\n• At-Risk Streaks (warning states)")
                 }
 
                 Section {
@@ -108,34 +94,12 @@ struct DebugMenuView: View {
 
     // MARK: - Actions
 
-    private func generateBasicTestData() {
-        generatingData = true
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            let generator = TestDataGenerator(modelContext: modelContext)
-            generator.generateTestSystem(daysOfHistory: 30)
-
-            generatingData = false
-        }
-    }
-
-    private func generateMultipleTestSystems() {
+    private func generateTestData() {
         generatingData = true
 
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
             let generator = TestDataGenerator(modelContext: modelContext)
             generator.generateMultipleTestSystems()
-
-            generatingData = false
-        }
-    }
-
-    private func generate7DaysData() {
-        generatingData = true
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            let generator = TestDataGenerator(modelContext: modelContext)
-            generator.generateTestSystem(daysOfHistory: 7)
 
             generatingData = false
         }
