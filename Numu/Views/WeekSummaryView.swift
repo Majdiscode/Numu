@@ -329,7 +329,7 @@ struct DayCircleView: View {
                     Text(date, format: .dateTime.day())
                         .font(.caption)
                         .fontWeight(.semibold)
-                        .foregroundStyle(dayColor == .gray.opacity(0.3) ? .secondary : .white)
+                        .foregroundStyle(dayColor == .gray.opacity(0.3) ? Color.secondary : Color.white)
                 )
         }
         .frame(maxWidth: .infinity)
