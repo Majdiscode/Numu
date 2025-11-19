@@ -19,6 +19,10 @@ struct MainTabView: View {
                 AnalyticsView()
             }
 
+            Tab("Calendar", systemImage: "calendar") {
+                CalendarView()
+            }
+
             Tab("Settings", systemImage: "gear") {
                 SettingsView()
             }
