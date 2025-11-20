@@ -560,18 +560,14 @@ struct SystemCard: View {
     let system: System
     let modelContext: ModelContext
 
-    @State private var completionRate: Double = 0.0
-
     var body: some View {
         // Defensive: Safely get tasks and tests
-        let todaysTasks: [HabitTask]
-        let weeklyTasks: [HabitTask]
-        let dueTests: [PerformanceTest]
+        let todaysTasks = system.todaysTasks
+        let weeklyTasks = system.weeklyTasks
+        let dueTests = system.dueTests
 
-        // Safe access to system properties with defensive coding
-        todaysTasks = system.todaysTasks
-        weeklyTasks = system.weeklyTasks
-        dueTests = system.dueTests
+        // Calculate completion rate once per render
+        let completionRate = (system.tasks != nil) ? system.todayCompletionRate : 0.0
 
         return VStack(spacing: 16) {
             // Header
@@ -615,17 +611,6 @@ struct SystemCard: View {
                         .font(.caption2)
                         .fontWeight(.bold)
                 }
-            }
-            .onAppear {
-                updateCompletionRate()
-            }
-            .onChange(of: system.tasks?.count ?? 0) { _, _ in
-                // Update when tasks change
-                updateCompletionRate()
-            }
-            .onChange(of: todaysTasks.map { $0.isCompletedToday() }) { _, _ in
-                // Update when any task completion changes
-                updateCompletionRate()
             }
 
             // Today's Tasks (daily/weekdays/weekends)
@@ -693,15 +678,6 @@ struct SystemCard: View {
             }
         }
         .elevatedCard(elevation: .level1, cornerRadius: 16, padding: 16)
-    }
-
-    private func updateCompletionRate() {
-        // Safely calculate completion rate
-        if system.tasks != nil {
-            completionRate = system.todayCompletionRate
-        } else {
-            completionRate = 0.0
-        }
     }
 }
 
