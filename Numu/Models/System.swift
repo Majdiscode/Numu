@@ -27,6 +27,11 @@ final class System {
     var color: String = "#FF6B35"  // Hex color
     var icon: String = "figure.run"  // SF Symbol name
 
+    // Performance optimization: cache expensive calculations
+    private var cachedConsistency: Double?
+    private var consistencyCacheDate: Date?
+    private let consistencyCacheDuration: TimeInterval = 300 // 5 minutes
+
     // Relationships (using cascade delete for data integrity)
     // CloudKit requires relationships to be optional
     @Relationship(deleteRule: .cascade, inverse: \HabitTask.system)
@@ -98,9 +103,15 @@ final class System {
         return Double(completedWeeklyCount) / Double(weekly.count)
     }
 
-    /// Total completions for all weekly tasks this week
+    /// Total completions for all weekly tasks this week (capped at target)
     var totalWeeklyCompletions: Int {
-        weeklyTasks.reduce(0) { $0 + $1.completionsThisWeek() }
+        weeklyTasks.reduce(0) { total, task in
+            if case .weeklyTarget(let times) = task.frequency {
+                // Cap completions at target to prevent over-completion from inflating progress
+                return total + min(task.completionsThisWeek(), times)
+            }
+            return total
+        }
     }
 
     /// Total target for all weekly tasks this week
@@ -113,29 +124,66 @@ final class System {
         }
     }
 
-    /// Overall system consistency since creation
+    /// Overall system consistency since creation (CACHED for performance)
     var overallConsistency: Double {
+        // Check cache validity
+        if let cached = cachedConsistency,
+           let cacheDate = consistencyCacheDate,
+           Date().timeIntervalSince(cacheDate) < consistencyCacheDuration {
+            return cached
+        }
+
+        // Calculate and cache
+        let result = calculateOverallConsistency()
+        cachedConsistency = result
+        consistencyCacheDate = Date()
+        return result
+    }
+
+    /// Force recalculation of consistency (call after data changes)
+    func invalidateConsistencyCache() {
+        cachedConsistency = nil
+        consistencyCacheDate = nil
+    }
+
+    /// Optimized consistency calculation - queries logs once instead of per-day
+    private func calculateOverallConsistency() -> Double {
         guard let tasks = tasks, !tasks.isEmpty else { return 0.0 }
 
         let calendar = Calendar.current
         var totalExpected = 0
         var totalCompleted = 0
 
+        // Collect all logs once for efficiency
+        var allLogDates: Set<String> = []
         for task in tasks {
-            // Calculate days between task creation and now
+            if let logs = task.logs {
+                for log in logs {
+                    let dateKey = "\(task.id.uuidString)_\(calendar.startOfDay(for: log.date).timeIntervalSince1970)"
+                    allLogDates.insert(dateKey)
+                }
+            }
+        }
+
+        // Now calculate expected vs completed
+        for task in tasks {
             let taskStart = calendar.startOfDay(for: task.createdAt)
             let now = calendar.startOfDay(for: Date())
 
             guard let daysSince = calendar.dateComponents([.day], from: taskStart, to: now).day else { continue }
 
-            // Count how many days this task was DUE (based on frequency)
-            for dayOffset in 0...daysSince {
+            // Limit lookback to prevent excessive computation (max 1 year)
+            let daysToCheck = min(daysSince, 365)
+
+            for dayOffset in 0...daysToCheck {
                 guard let date = calendar.date(byAdding: .day, value: dayOffset, to: taskStart) else { continue }
 
                 if task.shouldBeCompletedOn(date: date) {
                     totalExpected += 1
 
-                    if task.wasCompletedOn(date: date) {
+                    // Check if completed using pre-fetched log dates
+                    let dateKey = "\(task.id.uuidString)_\(calendar.startOfDay(for: date).timeIntervalSince1970)"
+                    if allLogDates.contains(dateKey) {
                         totalCompleted += 1
                     }
                 }
@@ -144,7 +192,6 @@ final class System {
 
         guard totalExpected > 0 else { return 0.0 }
 
-        // Cap at 100% to prevent display issues
         return min(1.0, Double(totalCompleted) / Double(totalExpected))
     }
 
@@ -234,7 +281,7 @@ enum SystemCategory: String, Codable, CaseIterable {
         case .health: return "heart.circle.fill"       // Alternative: "heart.fill", "cross.circle.fill", "leaf.fill"
         case .mind: return "brain.fill"                // Alternative: "brain.head.profile", "lightbulb.fill", "sparkles"
         case .work: return "square.stack.3d.up.fill"   // Alternative: "briefcase.fill", "chart.line.uptrend.xyaxis", "target"
-        case .relationships: return "heart.2.fill"     // Alternative: "person.2.fill", "hands.sparkles.fill", "bubble.left.and.bubble.right.fill"
+        case .relationships: return "person.2.fill"     // Alternative: "heart.fill", "hands.sparkles.fill", "bubble.left.and.bubble.right.fill"
         case .creativity: return "wand.and.stars"      // Alternative: "paintbrush.fill", "camera.fill", "pencil.and.scribble"
         case .learning: return "graduationcap.fill"    // Alternative: "book.fill", "text.book.closed.fill", "brain.fill"
         case .lifestyle: return "sparkles"             // Alternative: "house.fill", "sun.horizon.fill", "leaf.fill"
