@@ -244,25 +244,26 @@ struct TestDataGenerator {
         generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -8, dailyCompletionRate: 0.2, weeklyCompletionRate: 0.3)
         generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -7, dailyCompletionRate: 0.4, weeklyCompletionRate: 0.4)
 
-        // Week -6 to -5: YELLOW weeks (50-79% completion)
-        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -6, dailyCompletionRate: 0.6, weeklyCompletionRate: 0.6)
-        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -5, dailyCompletionRate: 0.7, weeklyCompletionRate: 0.7)
+        // Week -6: RED week
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -6, dailyCompletionRate: 0.3, weeklyCompletionRate: 0.2)
 
-        // Week -4 to -3: GREEN weeks (80-100% completion)
-        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -4, dailyCompletionRate: 0.9, weeklyCompletionRate: 0.9)
-        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -3, dailyCompletionRate: 1.0, weeklyCompletionRate: 1.0)
+        // Week -5 to -4: YELLOW weeks (50-79% completion)
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -5, dailyCompletionRate: 0.6, weeklyCompletionRate: 0.6)
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -4, dailyCompletionRate: 0.7, weeklyCompletionRate: 0.7)
 
-        // Week -2: RED week
-        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -2, dailyCompletionRate: 0.3, weeklyCompletionRate: 0.2)
+        // Week -3 to -2: GREEN weeks (80-100% completion) 🟢 MOST VISIBLE
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -3, dailyCompletionRate: 0.9, weeklyCompletionRate: 0.9)
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -2, dailyCompletionRate: 1.0, weeklyCompletionRate: 1.0)
 
-        // Week -1: YELLOW week
-        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -1, dailyCompletionRate: 0.65, weeklyCompletionRate: 0.6)
+        // Week -1: GREEN week (perfect!)
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: -1, dailyCompletionRate: 1.0, weeklyCompletionRate: 1.0)
 
-        // Current week (partial): GREEN trend
-        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: 0, dailyCompletionRate: 0.85, weeklyCompletionRate: 0.8, partialWeek: true)
+        // Current week (partial): GREEN trend (on track for green!)
+        generateVariedWeek(tasks: [dailyTask1, dailyTask2, dailyTask3], weeklyTasks: [(weeklyTask1, 3), (weeklyTask2, 2)], weekOffset: 0, dailyCompletionRate: 0.95, weeklyCompletionRate: 0.9, partialWeek: true)
 
         print("   ✅ Calendar Heat Map: 8 weeks of varied patterns created!")
-        print("      🟢 Weeks -4, -3 (GREEN) | 🟡 Weeks -6, -5, -1 (YELLOW) | 🔴 Weeks -8, -7, -2 (RED)")
+        print("      🟢 Weeks -3, -2, -1, 0 (GREEN) | 🟡 Weeks -5, -4 (YELLOW) | 🔴 Weeks -8, -7, -6 (RED)")
+        print("      💡 TIP: Green weeks are in the CURRENT month for easy viewing!")
     }
 
     /// Generate a week with specific completion rates for daily and weekly tasks
@@ -300,8 +301,11 @@ struct TestDataGenerator {
         }
 
         // Weekly tasks: complete based on completion rate
+        // 🐛 FIX: Use rounded() instead of Int() to avoid truncation
+        // Before: 90% of 3 = Int(2.7) = 2 ❌
+        // After:  90% of 3 = round(2.7) = 3 ✓
         for (weeklyTask, target) in weeklyTasks {
-            let completionsNeeded = Int(Double(target) * weeklyCompletionRate)
+            let completionsNeeded = Int((Double(target) * weeklyCompletionRate).rounded())
 
             for completion in 0..<completionsNeeded {
                 let dayOffset = (completion * 2) % 7 // Spread across the week
