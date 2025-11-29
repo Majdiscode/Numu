@@ -20,75 +20,129 @@ struct SystemsDashboardView: View {
     @State private var previousCompletionRate: Double = 0
     @State private var previousWeeklyCompletionRate: Double = 0
 
+    // MARK: - Performance Optimization: Cached Stats
+    @State private var cachedOverallCompletionRate: Double = 0.0
+    @State private var cachedTotalActiveSystems: Int = 0
+    @State private var cachedOverallWeeklyCompletionRate: Double = 0.0
+    @State private var cachedTotalWeeklyTasks: Int = 0
+    @State private var cachedTotalCompletedWeeklyTasks: Int = 0
+    @State private var cachedTotalWeeklyCompletions: Int = 0
+    @State private var cachedTotalWeeklyTarget: Int = 0
+    @State private var cachedTotalTodaysTasks: Int = 0
+    @State private var cachedTotalCompletedTasks: Int = 0
+    @State private var statsNeedRefresh: Bool = true
+
     #if DEBUG
     @State private var showDebugMenu = false
     @State private var debugTapCount = 0
     #endif
 
+    // MARK: - Optimized Computed Properties (Use Cached Values)
+
     var overallCompletionRate: Double {
-        // Don't access systems during deletion to avoid accessing deleted objects
         guard !isDeletingTestData else { return 0.0 }
-        guard !systems.isEmpty else { return 0.0 }
-
-        let totalTasks = systems.reduce(0) { $0 + $1.todaysTasks.count }
-        guard totalTasks > 0 else { return 0.0 }
-
-        let completedTasks = systems.reduce(0) { $0 + $1.completedTodayCount }
-        return Double(completedTasks) / Double(totalTasks)
+        return cachedOverallCompletionRate
     }
 
     var totalActiveSystems: Int {
-        // Don't access systems during deletion to avoid accessing deleted objects
         guard !isDeletingTestData else { return 0 }
-        return systems.filter { !$0.todaysTasks.isEmpty }.count
+        return cachedTotalActiveSystems
     }
 
     var overallWeeklyCompletionRate: Double {
-        // Don't access systems during deletion to avoid accessing deleted objects
         guard !isDeletingTestData else { return 0.0 }
-        guard !systems.isEmpty else { return 0.0 }
-
-        // Calculate based on total completions vs total target
-        // Example: Task1 (2/3) + Task2 (1/2) = 3/5 = 60%
-        let totalCompletions = totalWeeklyCompletions
-        let totalTarget = totalWeeklyTarget
-
-        guard totalTarget > 0 else { return 0.0 }
-
-        let rate = Double(totalCompletions) / Double(totalTarget)
-        return min(1.0, max(0.0, rate))
+        return cachedOverallWeeklyCompletionRate
     }
 
     var totalWeeklyTasks: Int {
-        // Don't access systems during deletion to avoid accessing deleted objects
         guard !isDeletingTestData else { return 0 }
-        return systems.reduce(0) { total, system in
-            total + system.weeklyTasks.count
-        }
+        return cachedTotalWeeklyTasks
     }
 
     var totalCompletedWeeklyTasks: Int {
-        // Don't access systems during deletion to avoid accessing deleted objects
         guard !isDeletingTestData else { return 0 }
-        return systems.reduce(0) { total, system in
-            total + system.completedWeeklyCount
-        }
+        return cachedTotalCompletedWeeklyTasks
     }
 
     var totalWeeklyCompletions: Int {
-        // Don't access systems during deletion to avoid accessing deleted objects
         guard !isDeletingTestData else { return 0 }
-        return systems.reduce(0) { total, system in
-            total + system.totalWeeklyCompletions
-        }
+        return cachedTotalWeeklyCompletions
     }
 
     var totalWeeklyTarget: Int {
-        // Don't access systems during deletion to avoid accessing deleted objects
         guard !isDeletingTestData else { return 0 }
-        return systems.reduce(0) { total, system in
-            total + system.totalWeeklyTarget
+        return cachedTotalWeeklyTarget
+    }
+
+    // MARK: - Batch Stats Calculation (Optimized)
+
+    /// Calculate all dashboard stats in a single pass for optimal performance
+    private func refreshDashboardStats() {
+        guard !isDeletingTestData else { return }
+        guard !systems.isEmpty else {
+            resetCachedStats()
+            return
         }
+
+        // Single-pass calculation for all stats
+        var tempTotalTodaysTasks = 0
+        var tempTotalCompletedTasks = 0
+        var tempActiveSystems = 0
+        var tempTotalWeeklyTasks = 0
+        var tempCompletedWeeklyTasks = 0
+        var tempTotalWeeklyCompletions = 0
+        var tempTotalWeeklyTarget = 0
+
+        for system in systems {
+            let todaysTasks = system.todaysTasks
+            let todaysCompleted = system.completedTodayCount
+
+            tempTotalTodaysTasks += todaysTasks.count
+            tempTotalCompletedTasks += todaysCompleted
+
+            if !todaysTasks.isEmpty {
+                tempActiveSystems += 1
+            }
+
+            tempTotalWeeklyTasks += system.weeklyTasks.count
+            tempCompletedWeeklyTasks += system.completedWeeklyCount
+            tempTotalWeeklyCompletions += system.totalWeeklyCompletions
+            tempTotalWeeklyTarget += system.totalWeeklyTarget
+        }
+
+        // Update all cached values atomically with animation
+        withAnimation(.easeInOut(duration: 0.2)) {
+            cachedTotalTodaysTasks = tempTotalTodaysTasks
+            cachedTotalCompletedTasks = tempTotalCompletedTasks
+            cachedTotalActiveSystems = tempActiveSystems
+            cachedTotalWeeklyTasks = tempTotalWeeklyTasks
+            cachedTotalCompletedWeeklyTasks = tempCompletedWeeklyTasks
+            cachedTotalWeeklyCompletions = tempTotalWeeklyCompletions
+            cachedTotalWeeklyTarget = tempTotalWeeklyTarget
+
+            // Calculate rates
+            cachedOverallCompletionRate = tempTotalTodaysTasks > 0
+                ? Double(tempTotalCompletedTasks) / Double(tempTotalTodaysTasks)
+                : 0.0
+
+            cachedOverallWeeklyCompletionRate = tempTotalWeeklyTarget > 0
+                ? min(1.0, max(0.0, Double(tempTotalWeeklyCompletions) / Double(tempTotalWeeklyTarget)))
+                : 0.0
+
+            statsNeedRefresh = false
+        }
+    }
+
+    private func resetCachedStats() {
+        cachedOverallCompletionRate = 0.0
+        cachedTotalActiveSystems = 0
+        cachedOverallWeeklyCompletionRate = 0.0
+        cachedTotalWeeklyTasks = 0
+        cachedTotalCompletedWeeklyTasks = 0
+        cachedTotalWeeklyCompletions = 0
+        cachedTotalWeeklyTarget = 0
+        cachedTotalTodaysTasks = 0
+        cachedTotalCompletedTasks = 0
     }
 
     // MARK: - Celebration
@@ -214,6 +268,23 @@ struct SystemsDashboardView: View {
             #endif
             .onAppear {
                 cloudKitService.checkAccountStatus()
+                refreshDashboardStats()
+            }
+            .onChange(of: systems.count) { _, _ in
+                refreshDashboardStats()
+            }
+            .onChange(of: isDeletingTestData) { _, newValue in
+                if !newValue {
+                    refreshDashboardStats()
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+                // Refresh when app returns from background
+                refreshDashboardStats()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TaskCompletionChanged"))) { _ in
+                // Refresh when a task is completed/uncompleted
+                refreshDashboardStats()
             }
         }
     }
@@ -353,15 +424,13 @@ struct SystemsDashboardView: View {
     }
 
     private var totalTodaysTasks: Int {
-        // Don't access systems during deletion to avoid accessing deleted objects
         guard !isDeletingTestData else { return 0 }
-        return systems.reduce(0) { $0 + $1.todaysTasks.count }
+        return cachedTotalTodaysTasks
     }
 
     private var totalCompletedTasks: Int {
-        // Don't access systems during deletion to avoid accessing deleted objects
         guard !isDeletingTestData else { return 0 }
-        return systems.reduce(0) { $0 + $1.completedTodayCount }
+        return cachedTotalCompletedTasks
     }
 
     private var motivationalMessage: String {
@@ -503,20 +572,42 @@ struct SystemsDashboardView: View {
         }
     }
 
-    // MARK: - Systems List
+    // MARK: - Systems Grid (Widget Layout)
     private var systemsList: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 16) {
             // Don't render systems during deletion to avoid accessing deleted objects
             if !isDeletingTestData && !systems.isEmpty {
-                Text("Your Systems")
-                    .font(.title2)
-                    .fontWeight(.bold)
+                HStack {
+                    Text("Your Systems")
+                        .font(.title2)
+                        .fontWeight(.bold)
 
-                ForEach(systems) { system in
-                    NavigationLink(destination: SystemDetailView(system: system)) {
-                        SystemCard(system: system, modelContext: modelContext)
+                    Spacer()
+
+                    Text("\(systems.count)")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Color(.systemGray5))
+                        .clipShape(Capsule())
+                }
+
+                // 2-column grid layout
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 12),
+                        GridItem(.flexible(), spacing: 12)
+                    ],
+                    spacing: 12
+                ) {
+                    ForEach(systems) { system in
+                        NavigationLink(destination: SystemDetailView(system: system)) {
+                            SystemWidgetCard(system: system, modelContext: modelContext)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(ScaleButtonStyle())
                 }
             }
         }
@@ -555,129 +646,283 @@ struct SystemsDashboardView: View {
     }
 }
 
-// MARK: - System Card Component
-struct SystemCard: View {
+// MARK: - System Widget Card (Compact 2-Column Layout)
+struct SystemWidgetCard: View {
     let system: System
     let modelContext: ModelContext
 
+    // Performance optimization: Cache expensive calculations
+    @State private var cachedTodaysTasks: [HabitTask] = []
+    @State private var cachedWeeklyTasks: [HabitTask] = []
+    @State private var cachedDueTests: [PerformanceTest] = []
+    @State private var cachedCompletionRate: Double = 0.0
+    @State private var isExpanded: Bool = false
+
+    private func refreshCache() {
+        cachedTodaysTasks = system.todaysTasks
+        cachedWeeklyTasks = system.weeklyTasks
+        cachedDueTests = system.dueTests
+        cachedCompletionRate = (system.tasks != nil) ? system.todayCompletionRate : 0.0
+    }
+
     var body: some View {
-        // Defensive: Safely get tasks and tests
-        let todaysTasks = system.todaysTasks
-        let weeklyTasks = system.weeklyTasks
-        let dueTests = system.dueTests
+        VStack(spacing: 0) {
+            // Compact Widget Header
+            VStack(spacing: 16) {
+                // Icon & Name
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle()
+                            .fill(Color(hex: system.color).opacity(0.15))
+                            .frame(width: 50, height: 50)
 
-        // Calculate completion rate once per render
-        let completionRate = (system.tasks != nil) ? system.todayCompletionRate : 0.0
+                        Image(systemName: system.icon)
+                            .font(.title3)
+                            .foregroundStyle(Color(hex: system.color))
+                    }
 
-        return VStack(spacing: 16) {
-            // Header
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .fill(Color(hex: system.color).opacity(0.15))
-                        .frame(width: 50, height: 50)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(system.name)
+                            .font(.headline)
+                            .fontWeight(.bold)
+                            .foregroundStyle(.primary)
+                            .lineLimit(2)
 
-                    Image(systemName: system.icon)
-                        .font(.title3)
-                        .foregroundStyle(Color(hex: system.color))
-                }
+                        HStack(spacing: 8) {
+                            if !cachedTodaysTasks.isEmpty {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "calendar")
+                                        .font(.caption2)
+                                    Text("\(cachedTodaysTasks.count)")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                }
+                            }
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(system.name)
-                        .font(.headline)
-                        .foregroundStyle(.primary)
+                            if !cachedWeeklyTasks.isEmpty {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "target")
+                                        .font(.caption2)
+                                    Text("\(cachedWeeklyTasks.count)")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                }
+                            }
 
-                    Label(system.category.rawValue, systemImage: system.category.systemIcon)
-                        .font(.caption)
+                            if !cachedDueTests.isEmpty {
+                                HStack(spacing: 3) {
+                                    Image(systemName: "chart.bar.fill")
+                                        .font(.caption2)
+                                    Text("\(cachedDueTests.count)")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+                                }
+                                .foregroundStyle(.orange)
+                            }
+                        }
                         .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                // Completion indicator
-                ZStack {
-                    Circle()
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 4)
-                        .frame(width: 44, height: 44)
-
-                    Circle()
-                        .trim(from: 0, to: max(0, min(1, completionRate)))
-                        .stroke(Color(hex: system.color), lineWidth: 4)
-                        .frame(width: 44, height: 44)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.spring(response: 0.5), value: completionRate)
-
-                    Text("\(Int(max(0, min(100, completionRate * 100))))")
-                        .font(.caption2)
-                        .fontWeight(.bold)
-                }
-            }
-
-            // Today's Tasks (daily/weekdays/weekends)
-            if !todaysTasks.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "calendar")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("Today's Tasks")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
                     }
 
-                    ForEach(todaysTasks) { task in
-                        TaskRow(task: task, modelContext: modelContext)
-                    }
-                }
-                .padding(12)
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(.separator).opacity(0.2), lineWidth: 1)
-                )
-            }
-
-            // Weekly Goals (weekly frequency tasks)
-            if !weeklyTasks.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Image(systemName: "target")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("Weekly Goals")
-                            .font(.caption)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    ForEach(weeklyTasks) { task in
-                        TaskRow(task: task, modelContext: modelContext)
-                    }
-                }
-                .padding(12)
-                .background(Color(.systemBackground))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(Color(.separator).opacity(0.2), lineWidth: 1)
-                )
-            }
-
-            // Due Tests
-            if !dueTests.isEmpty {
-                HStack {
-                    Image(systemName: "checkmark.circle.badge.questionmark")
-                        .foregroundStyle(.orange)
-                    Text("\(dueTests.count) test\(dueTests.count == 1 ? "" : "s") due")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                     Spacer()
+
+                    // Smaller completion circle (like before)
+                    ZStack {
+                        Circle()
+                            .stroke(Color.gray.opacity(0.2), lineWidth: 4)
+                            .frame(width: 48, height: 48)
+
+                        Circle()
+                            .trim(from: 0, to: max(0, min(1, cachedCompletionRate)))
+                            .stroke(Color(hex: system.color), lineWidth: 4)
+                            .frame(width: 48, height: 48)
+                            .rotationEffect(.degrees(-90))
+                            .animation(.spring(response: 0.5), value: cachedCompletionRate)
+
+                        Text("\(Int(max(0, min(100, cachedCompletionRate * 100))))")
+                            .font(.caption)
+                            .fontWeight(.bold)
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, minHeight: 120)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color(.systemBackground),
+                        Color(.systemBackground).opacity(0.95)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+
+            // Expandable Tasks Dropdown
+            if !cachedTodaysTasks.isEmpty || !cachedWeeklyTasks.isEmpty {
+                VStack(spacing: 0) {
+                    Button {
+                        withAnimation(.easeInOut(duration: 0.25)) {
+                            isExpanded.toggle()
+                        }
+                    } label: {
+                        HStack {
+                            Text(isExpanded ? "Hide Tasks" : "Show Tasks")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+
+                            Spacer()
+
+                            Image(systemName: "chevron.down")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        }
+                        .foregroundStyle(Color(hex: system.color))
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(Color(hex: system.color).opacity(0.1))
+                    }
+                    .buttonStyle(.plain)
+
+                    // Expanded Tasks
+                    if isExpanded {
+                        VStack(spacing: 0) {
+                            // Today's Tasks
+                            if !cachedTodaysTasks.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Today")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, 12)
+
+                                    ForEach(cachedTodaysTasks) { task in
+                                        CompactTaskRow(task: task, modelContext: modelContext)
+                                    }
+                                }
+                            }
+
+                            // Weekly Goals
+                            if !cachedWeeklyTasks.isEmpty {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Weekly")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundStyle(.secondary)
+                                        .padding(.horizontal, 16)
+                                        .padding(.top, cachedTodaysTasks.isEmpty ? 12 : 16)
+
+                                    ForEach(cachedWeeklyTasks) { task in
+                                        CompactTaskRow(task: task, modelContext: modelContext)
+                                    }
+                                }
+                                .padding(.bottom, 12)
+                            }
+                        }
+                        .background(Color(.systemGray6).opacity(0.3))
+                    }
                 }
             }
         }
-        .elevatedCard(elevation: .level1, cornerRadius: 16, padding: 16)
+        .background(Color(.systemBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(Color(.separator).opacity(0.1), lineWidth: 1)
+        )
+        .onAppear {
+            refreshCache()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TaskCompletionChanged"))) { _ in
+            refreshCache()
+        }
+    }
+}
+
+// MARK: - Compact Task Row (For Widget Cards)
+struct CompactTaskRow: View {
+    let task: HabitTask
+    let modelContext: ModelContext
+
+    @State private var isCompleted: Bool = false
+    @State private var showCheckIn: Bool = false
+
+    private func refreshCompletion() {
+        isCompleted = task.isCompletedToday()
+    }
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                toggleCompletion()
+            } label: {
+                let completionColor: Color = task.habitType == .positive ? .green : .orange
+                Image(systemName: isCompleted ? task.habitType.icon : "circle")
+                    .font(.system(size: 20))
+                    .foregroundStyle(isCompleted ? completionColor : .gray.opacity(0.3))
+                    .frame(width: 24, height: 24)
+            }
+            .buttonStyle(.plain)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(task.name)
+                    .font(.subheadline)
+                    .foregroundStyle(isCompleted ? .secondary : .primary)
+                    .lineLimit(1)
+
+                if let progressText = task.weeklyProgressText() {
+                    Text(progressText)
+                        .font(.caption2)
+                        .foregroundStyle(task.weeklyTargetMet() ? .green : .blue)
+                }
+            }
+
+            Spacer()
+
+            if task.currentStreak > 0 {
+                HStack(spacing: 3) {
+                    Image(systemName: task.isStreakAtRisk ? "exclamationmark.triangle.fill" : "flame.fill")
+                        .font(.caption)
+                    Text("\(task.currentStreak)")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                }
+                .foregroundStyle(task.isStreakAtRisk ? .yellow : .orange)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(isCompleted ? Color(.systemGray6).opacity(0.5) : Color.clear)
+        .onAppear {
+            refreshCompletion()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TaskCompletionChanged"))) { _ in
+            refreshCompletion()
+        }
+    }
+
+    private func toggleCompletion() {
+        withAnimation(.spring(response: 0.3)) {
+            if isCompleted {
+                if let todayLog = task.logs?.first(where: { Calendar.current.isDateInToday($0.date) }) {
+                    modelContext.delete(todayLog)
+                }
+            } else {
+                let log = HabitTaskLog()
+                log.task = task
+                modelContext.insert(log)
+            }
+
+            do {
+                try modelContext.save()
+                isCompleted.toggle()
+                NotificationCenter.default.post(name: Notification.Name("TaskCompletionChanged"), object: nil)
+            } catch {
+                print("Error toggling task: \(error)")
+            }
+        }
     }
 }
 
@@ -688,9 +933,21 @@ struct TaskRow: View {
 
     @State private var isCompleted: Bool = false
     @State private var showCheckIn: Bool = false
+    @State private var cachedWeeklyProgressText: String? = nil
+    @State private var cachedCurrentStreak: Int = 0
+    @State private var cachedIsStreakAtRisk: Bool = false
+    @State private var cachedIsOverTarget: Bool = false
 
     var isTimeBased: Bool {
         task.habitType == .negative && task.hasTimeLimit
+    }
+
+    private func refreshTaskCache() {
+        isCompleted = task.isCompletedToday()
+        cachedWeeklyProgressText = task.weeklyProgressText()
+        cachedCurrentStreak = task.currentStreak
+        cachedIsStreakAtRisk = task.isStreakAtRisk
+        cachedIsOverTarget = task.isOverWeeklyTarget()
     }
 
     var body: some View {
@@ -699,10 +956,9 @@ struct TaskRow: View {
                 handleTaskTap()
             } label: {
                 let completionColor: Color = task.habitType == .positive ? .green : .orange
-                let isOverTarget = task.isOverWeeklyTarget()
-                Image(systemName: isCompleted || isOverTarget ? task.habitType.icon : "circle")
+                Image(systemName: isCompleted || cachedIsOverTarget ? task.habitType.icon : "circle")
                     .font(.title3)
-                    .foregroundStyle((isCompleted || isOverTarget) ? completionColor.opacity(isOverTarget && !isCompleted ? 0.5 : 1.0) : .gray.opacity(0.3))
+                    .foregroundStyle((isCompleted || cachedIsOverTarget) ? completionColor.opacity(cachedIsOverTarget && !isCompleted ? 0.5 : 1.0) : .gray.opacity(0.3))
             }
             .buttonStyle(.plain)
 
@@ -724,8 +980,8 @@ struct TaskRow: View {
                     }
                 }
 
-                // Show weekly progress for weekly targets
-                if let progressText = task.weeklyProgressText() {
+                // Show weekly progress for weekly targets (cached)
+                if let progressText = cachedWeeklyProgressText {
                     Text(progressText)
                         .font(.caption2)
                         .foregroundStyle(task.weeklyTargetMet() ? .green : .blue)
@@ -734,10 +990,10 @@ struct TaskRow: View {
 
             Spacer()
 
-            if task.currentStreak > 0 {
+            if cachedCurrentStreak > 0 {
                 HStack(spacing: 4) {
                     // Show warning icon if streak is at risk (one miss already)
-                    if task.isStreakAtRisk {
+                    if cachedIsStreakAtRisk {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption2)
                             .foregroundStyle(.yellow)
@@ -749,24 +1005,27 @@ struct TaskRow: View {
 
                     // Show week/day based on frequency type
                     if case .weeklyTarget = task.frequency {
-                        Text("\(task.currentStreak)w")
+                        Text("\(cachedCurrentStreak)w")
                             .font(.caption2)
-                            .foregroundStyle(task.isStreakAtRisk ? .yellow : .orange)
+                            .foregroundStyle(cachedIsStreakAtRisk ? .yellow : .orange)
                     } else {
-                        Text("\(task.currentStreak)")
+                        Text("\(cachedCurrentStreak)")
                             .font(.caption2)
-                            .foregroundStyle(task.isStreakAtRisk ? .yellow : .orange)
+                            .foregroundStyle(cachedIsStreakAtRisk ? .yellow : .orange)
                     }
                 }
             }
         }
         .onAppear {
-            isCompleted = task.isCompletedToday()
+            refreshTaskCache()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TaskCompletionChanged"))) { _ in
+            refreshTaskCache()
         }
         .sheet(isPresented: $showCheckIn) {
             TaskCheckInView(task: task)
                 .onDisappear {
-                    isCompleted = task.isCompletedToday()
+                    refreshTaskCache()
                 }
         }
     }
@@ -804,6 +1063,12 @@ struct TaskRow: View {
             do {
                 try modelContext.save()
                 isCompleted.toggle()
+
+                // Notify dashboard to refresh stats
+                NotificationCenter.default.post(name: Notification.Name("TaskCompletionChanged"), object: nil)
+
+                // Refresh local cache
+                refreshTaskCache()
             } catch {
                 print("Error toggling task: \(error)")
             }

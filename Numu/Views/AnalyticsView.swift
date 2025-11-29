@@ -14,6 +14,13 @@ struct AnalyticsView: View {
     @Query private var systems: [System]
 
     @State private var selectedTimeRange: TimeRange = .week
+    @State private var cachedCompletionData: [CompletionDataPoint] = []
+    @State private var cacheTimeRange: TimeRange = .week
+    @State private var cacheTimestamp: Date = Date()
+    @State private var isLoadingData: Bool = false
+
+    // Cache duration: 30 seconds
+    private let cacheDuration: TimeInterval = 30
 
     var body: some View {
         NavigationStack {
@@ -32,6 +39,40 @@ struct AnalyticsView: View {
             }
             .navigationTitle("Analytics")
             .navigationBarTitleDisplayMode(.large)
+            .onAppear {
+                updateCacheIfNeeded()
+            }
+            .onChange(of: selectedTimeRange) { _, _ in
+                updateCacheIfNeeded()
+            }
+        }
+    }
+
+    // MARK: - Cache Management
+
+    private func updateCacheIfNeeded() {
+        let now = Date()
+        let cacheAge = now.timeIntervalSince(cacheTimestamp)
+
+        // Update cache if:
+        // 1. Time range changed, OR
+        // 2. Cache is older than duration
+        if cacheTimeRange != selectedTimeRange || cacheAge > cacheDuration {
+            // Start loading immediately with smooth transition
+            isLoadingData = true
+
+            Task { @MainActor in
+                // Calculate new data (no artificial delay)
+                let newData = calculateCompletionData()
+
+                // Smooth cross-fade to new data
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                    cachedCompletionData = newData
+                    cacheTimeRange = selectedTimeRange
+                    cacheTimestamp = now
+                    isLoadingData = false
+                }
+            }
         }
     }
 
@@ -124,7 +165,7 @@ struct AnalyticsView: View {
             }
 
             VStack(spacing: 16) {
-                if completionData.isEmpty {
+                if cachedCompletionData.isEmpty {
                     // Empty state
                     VStack(spacing: 12) {
                         Image(systemName: "chart.line.uptrend.xyaxis")
@@ -143,7 +184,7 @@ struct AnalyticsView: View {
                     .padding(.vertical, 40)
                 } else {
                     // Chart
-                    Chart(completionData) { dataPoint in
+                    Chart(cachedCompletionData) { dataPoint in
                         LineMark(
                             x: .value("Date", dataPoint.date),
                             y: .value("Completion %", dataPoint.completionRate * 100)
@@ -193,6 +234,9 @@ struct AnalyticsView: View {
                         }
                     }
                     .frame(height: 200)
+                    .opacity(isLoadingData ? 0.3 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isLoadingData)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: cachedCompletionData.count)
 
                     // Stats below chart
                     HStack(spacing: 24) {
@@ -230,6 +274,9 @@ struct AnalyticsView: View {
                         Spacer()
                     }
                     .padding(.top, 8)
+                    .opacity(isLoadingData ? 0.3 : 1.0)
+                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isLoadingData)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: cachedCompletionData.count)
                 }
             }
             .frame(maxWidth: .infinity)
@@ -252,7 +299,7 @@ struct AnalyticsView: View {
     // MARK: - Completion Data (Overall)
 
     /// Calculate daily completion rates for the selected time range (across ALL systems)
-    private var completionData: [CompletionDataPoint] {
+    private func calculateCompletionData() -> [CompletionDataPoint] {
         let calendar = Calendar.current
         let now = Date()
         let daysToShow = selectedTimeRange.days
@@ -315,21 +362,21 @@ struct AnalyticsView: View {
     }
 
     private var averageCompletionRate: Double {
-        guard !completionData.isEmpty else { return 0.0 }
-        let sum = completionData.reduce(0.0) { $0 + $1.completionRate }
-        return sum / Double(completionData.count)
+        guard !cachedCompletionData.isEmpty else { return 0.0 }
+        let sum = cachedCompletionData.reduce(0.0) { $0 + $1.completionRate }
+        return sum / Double(cachedCompletionData.count)
     }
 
     private var bestCompletionRate: Double {
-        completionData.map { $0.completionRate }.max() ?? 0.0
+        cachedCompletionData.map { $0.completionRate }.max() ?? 0.0
     }
 
     private var trendDirection: TrendDirection {
-        guard completionData.count >= 2 else { return .stable }
+        guard cachedCompletionData.count >= 2 else { return .stable }
 
-        let halfPoint = completionData.count / 2
-        let firstHalf = completionData.prefix(halfPoint)
-        let secondHalf = completionData.suffix(halfPoint)
+        let halfPoint = cachedCompletionData.count / 2
+        let firstHalf = cachedCompletionData.prefix(halfPoint)
+        let secondHalf = cachedCompletionData.suffix(halfPoint)
 
         let firstAverage = firstHalf.isEmpty ? 0 : firstHalf.reduce(0.0) { $0 + $1.completionRate } / Double(firstHalf.count)
         let secondAverage = secondHalf.isEmpty ? 0 : secondHalf.reduce(0.0) { $0 + $1.completionRate } / Double(secondHalf.count)
@@ -452,7 +499,10 @@ struct SystemCompletionChart: View {
     let system: System
     let timeRange: TimeRange
 
-    private var completionData: [CompletionDataPoint] {
+    @State private var cachedData: [CompletionDataPoint] = []
+    @State private var cacheTimeRange: TimeRange = .week
+
+    private func calculateCompletionData() -> [CompletionDataPoint] {
         let calendar = Calendar.current
         let now = Date()
         let daysToShow = timeRange.days
@@ -505,8 +555,8 @@ struct SystemCompletionChart: View {
     }
 
     private var averageCompletion: Double {
-        guard !completionData.isEmpty else { return 0.0 }
-        return completionData.reduce(0.0) { $0 + $1.completionRate } / Double(completionData.count)
+        guard !cachedData.isEmpty else { return 0.0 }
+        return cachedData.reduce(0.0) { $0 + $1.completionRate } / Double(cachedData.count)
     }
 
     var body: some View {
@@ -523,14 +573,14 @@ struct SystemCompletionChart: View {
                     .foregroundStyle(.secondary)
             }
 
-            if completionData.isEmpty {
+            if cachedData.isEmpty {
                 Text("No task completion data for this period")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 20)
             } else {
-                Chart(completionData) { dataPoint in
+                Chart(cachedData) { dataPoint in
                     LineMark(
                         x: .value("Date", dataPoint.date),
                         y: .value("Completion", dataPoint.completionRate * 100)
@@ -572,6 +622,16 @@ struct SystemCompletionChart: View {
         .padding()
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .onAppear {
+            if cachedData.isEmpty || cacheTimeRange != timeRange {
+                cachedData = calculateCompletionData()
+                cacheTimeRange = timeRange
+            }
+        }
+        .onChange(of: timeRange) { _, _ in
+            cachedData = calculateCompletionData()
+            cacheTimeRange = timeRange
+        }
     }
 }
 
@@ -580,7 +640,10 @@ struct TaskAnalyticsRow: View {
     let task: HabitTask
     let timeRange: TimeRange
 
-    private var completionStats: (completed: Int, due: Int, rate: Double) {
+    @State private var cachedStats: (completed: Int, due: Int, rate: Double) = (0, 0, 0.0)
+    @State private var cacheTimeRange: TimeRange = .week
+
+    private func calculateCompletionStats() -> (completed: Int, due: Int, rate: Double) {
         let calendar = Calendar.current
         let now = Date()
         let daysToShow = timeRange.days
@@ -619,10 +682,6 @@ struct TaskAnalyticsRow: View {
         return (tasksCompleted, tasksDue, rate)
     }
 
-    private var completionRate: Double {
-        completionStats.rate
-    }
-
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
@@ -646,11 +705,11 @@ struct TaskAnalyticsRow: View {
 
             // Completion rate
             VStack(alignment: .trailing, spacing: 2) {
-                Text("\(completionStats.completed)/\(completionStats.due)")
+                Text("\(cachedStats.completed)/\(cachedStats.due)")
                     .font(.headline)
-                    .foregroundStyle(completionRate >= 0.8 ? .green : completionRate >= 0.5 ? .orange : .red)
+                    .foregroundStyle(cachedStats.rate >= 0.8 ? .green : cachedStats.rate >= 0.5 ? .orange : .red)
 
-                Text("\(Int(completionRate * 100))% consistency")
+                Text("\(Int(cachedStats.rate * 100))% consistency")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }
@@ -658,6 +717,16 @@ struct TaskAnalyticsRow: View {
         .padding()
         .background(Color(.systemGray6))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .onAppear {
+            if cacheTimeRange != timeRange {
+                cachedStats = calculateCompletionStats()
+                cacheTimeRange = timeRange
+            }
+        }
+        .onChange(of: timeRange) { _, _ in
+            cachedStats = calculateCompletionStats()
+            cacheTimeRange = timeRange
+        }
     }
 }
 

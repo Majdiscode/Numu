@@ -81,7 +81,7 @@ struct CalendarView: View {
     // MARK: - Month Navigation
 
     private var monthNavigationHeader: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: 8) {
             // Previous month button
             Button {
                 withAnimation {
@@ -92,7 +92,7 @@ struct CalendarView: View {
                     .font(.title3)
                     .fontWeight(.medium)
                     .foregroundStyle(.primary)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 40, height: 40)
             }
 
             Spacer()
@@ -111,21 +111,20 @@ struct CalendarView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Text(currentMonthName)
-                        .font(.title3)
+                        .font(.callout)
                         .fontWeight(.semibold)
                         .lineLimit(1)
-                        .fixedSize()
                     Image(systemName: "chevron.down")
-                        .font(.caption)
+                        .font(.caption2)
                         .fontWeight(.semibold)
                 }
                 .foregroundStyle(.primary)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
                 .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
 
             // Year selector
@@ -142,21 +141,20 @@ struct CalendarView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     Text(currentYearString)
-                        .font(.title3)
+                        .font(.callout)
                         .fontWeight(.semibold)
                         .lineLimit(1)
-                        .fixedSize()
                     Image(systemName: "chevron.down")
-                        .font(.caption)
+                        .font(.caption2)
                         .fontWeight(.semibold)
                 }
                 .foregroundStyle(.primary)
-                .padding(.horizontal, 20)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
                 .background(Color(.systemGray6))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .clipShape(RoundedRectangle(cornerRadius: 10))
             }
 
             Spacer()
@@ -171,11 +169,11 @@ struct CalendarView: View {
                     .font(.title3)
                     .fontWeight(.medium)
                     .foregroundStyle(.primary)
-                    .frame(width: 44, height: 44)
+                    .frame(width: 40, height: 40)
             }
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
     // MARK: - System Filter
@@ -228,15 +226,15 @@ struct CalendarView: View {
         VStack(spacing: 0) {
             // Weekday headers
             HStack(spacing: 0) {
-                ForEach(calendar.veryShortWeekdaySymbols, id: \.self) { day in
+                ForEach(Array(calendar.veryShortWeekdaySymbols.enumerated()), id: \.offset) { index, day in
                     Text(day)
-                        .font(.system(size: 14))
-                        .fontWeight(.medium)
+                        .font(.caption)
+                        .fontWeight(.semibold)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.bottom, 16)
+            .padding(.bottom, 12)
             .padding(.top, 8)
 
             // Weeks
@@ -257,7 +255,7 @@ struct CalendarView: View {
                     dayCell(date: date)
                 }
             }
-            .padding(.vertical, 8)
+            .padding(.vertical, 6)
             .background(weekColor != .clear && weekColor != .gray ? weekColor.opacity(0.25) : Color.clear)
             .clipShape(Capsule())
             .onTapGesture {
@@ -265,7 +263,7 @@ struct CalendarView: View {
                 showWeekSummary = true
             }
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, 2)
     }
 
     private func dayCell(date: Date) -> some View {
@@ -279,26 +277,26 @@ struct CalendarView: View {
             selectedDate = date
             showDayDetail = true
         } label: {
-            VStack(spacing: 6) {
+            VStack(spacing: 4) {
                 Text(date, format: .dateTime.day())
-                    .font(.system(size: 16))
+                    .font(.system(size: 15))
                     .fontWeight(isToday ? .semibold : .regular)
                     .foregroundStyle(isSelected ? .primary : (isCurrentMonth ? .primary : .tertiary))
 
                 if showIndicator {
                     Circle()
                         .fill(dayColor)
-                        .frame(width: 6, height: 6)
+                        .frame(width: 5, height: 5)
                 } else {
                     Circle()
                         .fill(Color.clear)
-                        .frame(width: 6, height: 6)
+                        .frame(width: 5, height: 5)
                 }
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 50)
+            .frame(height: 44)
             .background(isSelected ? Color(.systemBackground) : Color.clear)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
     }
@@ -469,12 +467,15 @@ struct CalendarView: View {
             return .clear
         }
 
-        var totalWeeklyTargets = 0
-        var completedWeeklyTargets = 0
-        var hasTasksInThisWeek = false
+        // Calculate per-system completion rates, then average them
+        // This prevents one system from diluting another's performance
+        var systemCompletionRates: [Double] = []
 
         for system in filteredSystems {
             guard let tasks = system.tasks else { continue }
+
+            var systemTotalTargets = 0
+            var systemCompletedTargets = 0
 
             for task in tasks {
                 // Only count weekly tasks
@@ -484,21 +485,27 @@ struct CalendarView: View {
 
                     // Only count this task if it was created before or during this week
                     if taskCreationDate <= weekInterval.end {
-                        hasTasksInThisWeek = true
-                        totalWeeklyTargets += times
+                        systemTotalTargets += times
                         let completions = task.completionsInWeek(containing: weekStart)
-                        completedWeeklyTargets += min(completions, times)
+                        systemCompletedTargets += min(completions, times)
                     }
                 }
+            }
+
+            // Only include systems that had weekly goals this week
+            if systemTotalTargets > 0 {
+                let systemRate = Double(systemCompletedTargets) / Double(systemTotalTargets)
+                systemCompletionRates.append(systemRate)
             }
         }
 
         // No weekly goals existed during this week
-        if !hasTasksInThisWeek || totalWeeklyTargets == 0 {
+        if systemCompletionRates.isEmpty {
             return .clear
         }
 
-        let completionRate = Double(completedWeeklyTargets) / Double(totalWeeklyTargets)
+        // Average the completion rates across all systems
+        let completionRate = systemCompletionRates.reduce(0, +) / Double(systemCompletionRates.count)
 
         if completionRate >= 0.8 {
             return Color(red: 0.2, green: 0.8, blue: 0.3)  // Brighter green
