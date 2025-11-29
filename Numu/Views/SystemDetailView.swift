@@ -646,6 +646,10 @@ struct TaskDetailRow: View {
 
             do {
                 try modelContext.save()
+
+                // Invalidate system cache to ensure fresh calculations
+                task.system?.invalidateConsistencyCache()
+
                 isCompleted = task.isCompletedToday()
             } catch {
                 print("Error toggling task: \(error)")
@@ -966,6 +970,10 @@ struct TaskCheckInView: View {
 
         do {
             try modelContext.save()
+
+            // Invalidate system cache to ensure fresh calculations
+            task.system?.invalidateConsistencyCache()
+
             dismiss()
         } catch {
             print("Error saving task log: \(error)")
