@@ -13,6 +13,7 @@ import UserNotifications
 struct NumuApp: App {
     let modelContainer: ModelContainer
     @State private var notificationManager = NotificationManager()
+    @State private var healthKitService = HealthKitService()
 
     // Notification delegate for foreground notifications
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -113,10 +114,35 @@ struct NumuApp: App {
         WindowGroup {
             MainTabView()
                 .environment(notificationManager)
+                .environment(healthKitService)
                 .task {
                     // Request notification permissions on first launch
                     if notificationManager.authorizationStatus == .notDetermined {
                         await notificationManager.requestAuthorization()
+                    }
+
+                    // Request HealthKit authorization and sync on app launch
+                    if healthKitService.isHealthKitAvailable {
+                        // Request authorization if needed
+                        if !healthKitService.isAuthorized {
+                            await healthKitService.requestAuthorization()
+                        }
+
+                        // Sync HealthKit data for all mapped tasks
+                        if healthKitService.isAuthorized {
+                            let context = modelContainer.mainContext
+                            let descriptor = FetchDescriptor<HabitTask>()
+
+                            do {
+                                let allTasks = try context.fetch(descriptor)
+                                await healthKitService.checkAllMappedTasksForToday(
+                                    tasks: allTasks,
+                                    modelContext: context
+                                )
+                            } catch {
+                                print("❌ [HealthKit] Failed to fetch tasks for sync: \(error)")
+                            }
+                        }
                     }
                 }
         }

@@ -201,6 +201,13 @@ struct CreateSystemView: View {
             task.easeStrategy = taskBuilder.easeStrategy
             task.reward = taskBuilder.reward
 
+            // HealthKit Integration
+            task.healthKitActivityGroup = taskBuilder.healthKitActivityGroup
+            task.healthKitMetric = taskBuilder.healthKitMetric
+            task.healthKitThreshold = taskBuilder.healthKitThreshold
+            task.healthKitComparison = taskBuilder.healthKitComparison
+            task.healthKitAutoCompleteEnabled = taskBuilder.healthKitAutoCompleteEnabled
+
             task.system = system
             modelContext.insert(task)
             createdTasks.append(task)
@@ -262,6 +269,13 @@ struct TaskBuilder: Identifiable {
     var attractiveness: String?
     var easeStrategy: String?
     var reward: String?
+
+    // HealthKit Integration
+    var healthKitActivityGroup: ActivityGroup?
+    var healthKitMetric: HealthKitMetricType?
+    var healthKitThreshold: Double = 0.0
+    var healthKitComparison: ComparisonType = .greaterThanOrEqual
+    var healthKitAutoCompleteEnabled: Bool = false
 }
 
 // MARK: - Test Unit Enum
@@ -334,6 +348,7 @@ struct TestBuilder: Identifiable {
 // MARK: - Add Task Sheet
 struct AddTaskSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(HealthKitService.self) private var healthKitService
 
     @State private var taskName: String = ""
     @State private var taskDescription: String = ""
@@ -363,6 +378,12 @@ struct AddTaskSheet: View {
     @State private var easeStrategy: String = ""
     @State private var reward: String = ""
     @State private var showAtomicHabits: Bool = false
+
+    // HealthKit Integration
+    @State private var healthKitAutoComplete: Bool = false
+    @State private var selectedActivityGroup: ActivityGroup = .anyCardio
+    @State private var selectedMetric: HealthKitMetricType = .stepCount
+    @State private var showHealthKitSection: Bool = false
 
     let onAdd: (TaskBuilder) -> Void
 
@@ -593,6 +614,89 @@ struct AddTaskSheet: View {
                 } footer: {
                     Text("Apply James Clear's 4 Laws to make this habit stick. These are optional but powerful.")
                 }
+
+                // MARK: - HealthKit Integration
+                if healthKitService.isHealthKitAvailable {
+                    Section {
+                        DisclosureGroup("Auto-Complete via HealthKit (Optional)", isExpanded: $showHealthKitSection) {
+                            VStack(alignment: .leading, spacing: 20) {
+                                Toggle("Enable Auto-Complete", isOn: $healthKitAutoComplete)
+                                    .tint(.blue)
+
+                                if healthKitAutoComplete {
+                                    VStack(alignment: .leading, spacing: 16) {
+                                        Text("Select the activity or metric to track")
+                                            .font(.subheadline)
+                                            .foregroundStyle(.secondary)
+
+                                        // Activity Group Picker
+                                        Picker("Tracking Mode", selection: $selectedActivityGroup) {
+                                            ForEach(ActivityGroup.allCases, id: \.self) { group in
+                                                Label(group.rawValue, systemImage: group.icon)
+                                                    .tag(group)
+                                            }
+                                        }
+                                        .pickerStyle(.menu)
+
+                                        // Show description of what's included
+                                        Text(selectedActivityGroup.description)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                            .padding(.vertical, 8)
+                                            .padding(.horizontal, 12)
+                                            .background(Color(.systemGray6).opacity(0.5))
+                                            .cornerRadius(8)
+
+                                        // If specific activity selected, show metric picker
+                                        if selectedActivityGroup == .specificActivity {
+                                            Picker("Specific Activity", selection: $selectedMetric) {
+                                                ForEach(HealthKitCategory.allCases, id: \.self) { category in
+                                                    Section(header: Text(category.rawValue)) {
+                                                        ForEach(HealthKitMetricType.allCases.filter { $0.category == category }, id: \.self) { metric in
+                                                            Label(metric.displayName, systemImage: metric.icon)
+                                                                .tag(metric)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            .pickerStyle(.menu)
+                                        }
+
+                                        // Preview / Example
+                                        HStack(spacing: 8) {
+                                            Image(systemName: "checkmark.circle.fill")
+                                                .foregroundStyle(.green)
+                                                .font(.caption)
+
+                                            if selectedActivityGroup == .specificActivity {
+                                                Text("Auto-completes when you track \(selectedMetric.displayName.lowercased())")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            } else {
+                                                Text("Auto-completes when you do ANY of these activities")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
+                                        .padding(.vertical, 8)
+                                        .padding(.horizontal, 12)
+                                        .background(Color(.systemGreen).opacity(0.1))
+                                        .cornerRadius(8)
+                                    }
+                                    .padding(.vertical, 8)
+                                }
+                            }
+                        }
+                    } header: {
+                        Text("HealthKit Integration")
+                    } footer: {
+                        if !healthKitService.isAuthorized {
+                            Text("⚠️ HealthKit authorization required. Enable in Settings → Health → Data Access.")
+                        } else {
+                            Text("Task will automatically complete when you log the activity in Apple Health or your Apple Watch.")
+                        }
+                    }
+                }
             }
             .navigationTitle("Add Task")
             .navigationBarTitleDisplayMode(.inline)
@@ -609,7 +713,7 @@ struct AddTaskSheet: View {
                         let baselineTotal = (baselineHours * 60) + baselineMinutes
                         let targetTotal = (targetHours * 60) + targetMinutes
 
-                        let task = TaskBuilder(
+                        var task = TaskBuilder(
                             name: taskName,
                             description: taskDescription.isEmpty ? nil : taskDescription,
                             frequency: selectedFrequency,
@@ -622,6 +726,23 @@ struct AddTaskSheet: View {
                             easeStrategy: easeStrategy.isEmpty ? nil : easeStrategy,
                             reward: reward.isEmpty ? nil : reward
                         )
+
+                        // Add HealthKit settings if enabled
+                        if healthKitAutoComplete {
+                            if selectedActivityGroup == .specificActivity {
+                                // Save specific metric
+                                task.healthKitMetric = selectedMetric
+                                task.healthKitActivityGroup = nil
+                            } else {
+                                // Save activity group
+                                task.healthKitActivityGroup = selectedActivityGroup
+                                task.healthKitMetric = nil
+                            }
+                            task.healthKitThreshold = 0.0  // Not used - just checks if activity exists
+                            task.healthKitComparison = .greaterThanOrEqual
+                            task.healthKitAutoCompleteEnabled = true
+                        }
+
                         onAdd(task)
                         dismiss()
                     }

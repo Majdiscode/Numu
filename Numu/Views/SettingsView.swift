@@ -11,6 +11,8 @@ import SwiftData
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(NotificationManager.self) private var notificationManager
+    @Environment(HealthKitService.self) private var healthKitService
+    @Environment(\.modelContext) private var modelContext
     @Query private var systems: [System]
 
     @AppStorage("endOfDayEnabled") private var endOfDayEnabled = true
@@ -69,6 +71,81 @@ struct SettingsView: View {
                     }
                 } header: {
                     Text("Status")
+                }
+
+                // MARK: - HealthKit Integration
+                Section {
+                    if healthKitService.isHealthKitAvailable {
+                        // Authorization Status
+                        HStack {
+                            Label("HealthKit", systemImage: "heart.fill")
+
+                            Spacer()
+
+                            if healthKitService.isAuthorized {
+                                Label("Authorized", systemImage: "checkmark.circle.fill")
+                                    .foregroundStyle(.green)
+                            } else {
+                                Label(healthKitService.authorizationStatus, systemImage: "xmark.circle.fill")
+                                    .foregroundStyle(.red)
+                            }
+                        }
+                        .font(.subheadline)
+
+                        // Last Sync Time
+                        if let lastSync = healthKitService.lastSyncDate {
+                            HStack {
+                                Text("Last Sync")
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Text(lastSync, style: .relative)
+                                    .foregroundStyle(.secondary)
+                                    .font(.caption)
+                            }
+                        }
+
+                        // Manual Sync Button
+                        Button {
+                            Task {
+                                await healthKitService.checkAllMappedTasksForToday(
+                                    tasks: allTasks,
+                                    modelContext: modelContext
+                                )
+                            }
+                        } label: {
+                            HStack {
+                                if healthKitService.isSyncing {
+                                    ProgressView()
+                                        .scaleEffect(0.8)
+                                    Text("Syncing...")
+                                } else {
+                                    Label("Sync Now", systemImage: "arrow.triangle.2.circlepath")
+                                }
+                            }
+                        }
+                        .disabled(healthKitService.isSyncing || !healthKitService.isAuthorized)
+
+                        // Open Settings Button if not authorized
+                        if !healthKitService.isAuthorized {
+                            Button {
+                                if let url = URL(string: UIApplication.openSettingsURLString) {
+                                    UIApplication.shared.open(url)
+                                }
+                            } label: {
+                                Label("Open Settings", systemImage: "gear")
+                            }
+                        }
+                    } else {
+                        Text("HealthKit not available on this device")
+                            .foregroundStyle(.secondary)
+                            .font(.caption)
+                    }
+                } header: {
+                    Text("Health Integration")
+                } footer: {
+                    if healthKitService.isHealthKitAvailable {
+                        Text("Numu can automatically complete tasks when your HealthKit data meets configured thresholds")
+                    }
                 }
 
                 // MARK: - End of Day Summary

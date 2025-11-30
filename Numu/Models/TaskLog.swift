@@ -24,11 +24,17 @@ final class HabitTaskLog {
     // For time-based negative habits
     var minutesSpent: Int?  // Time spent on the habit (for negative habits with limits)
 
+    // HealthKit Integration
+    var syncedFromHealthKit: Bool = false  // Whether this log was auto-created from HealthKit
+    var healthKitValue: Double?  // Actual value from HealthKit (e.g., 12,345 steps)
+    var healthKitSampleUUID: String?  // HealthKit sample identifier for deduplication
+
     // Relationship to parent HabitTask
     var task: HabitTask?
 
     init(
         date: Date = Date(),
+        task: HabitTask? = nil,
         notes: String? = nil,
         satisfaction: Int? = nil,
         minutesSpent: Int? = nil
@@ -36,6 +42,7 @@ final class HabitTaskLog {
         self.id = UUID()
         self.date = Calendar.current.startOfDay(for: date)
         self.completedAt = Date()
+        self.task = task
         self.notes = notes
         self.satisfaction = satisfaction
         self.minutesSpent = minutesSpent

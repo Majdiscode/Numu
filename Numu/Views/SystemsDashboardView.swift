@@ -594,14 +594,8 @@ struct SystemsDashboardView: View {
                         .clipShape(Capsule())
                 }
 
-                // 2-column grid layout
-                LazyVGrid(
-                    columns: [
-                        GridItem(.flexible(), spacing: 12),
-                        GridItem(.flexible(), spacing: 12)
-                    ],
-                    spacing: 12
-                ) {
+                // Full-width stacked layout for better readability
+                VStack(spacing: 12) {
                     ForEach(systems) { system in
                         NavigationLink(destination: SystemDetailView(system: system)) {
                             SystemWidgetCard(system: system, modelContext: modelContext)
@@ -662,35 +656,68 @@ struct SystemWidgetCard: View {
         cachedTodaysTasks = system.todaysTasks
         cachedWeeklyTasks = system.weeklyTasks
         cachedDueTests = system.dueTests
-        cachedCompletionRate = (system.tasks != nil) ? system.todayCompletionRate : 0.0
+
+        // Calculate completion rate including both daily and weekly tasks
+        let dailyTasks = cachedTodaysTasks
+        let weeklyTasks = cachedWeeklyTasks
+
+        if dailyTasks.isEmpty && weeklyTasks.isEmpty {
+            cachedCompletionRate = 0.0
+        } else if dailyTasks.isEmpty {
+            // Only weekly tasks - show average weekly progress (e.g., 1/3 = 33%)
+            var totalProgress: Double = 0.0
+            for task in weeklyTasks {
+                if case .weeklyTarget(let times) = task.frequency {
+                    let completions = task.completionsThisWeek()
+                    let progress = min(1.0, Double(completions) / Double(times))
+                    totalProgress += progress
+                }
+            }
+            cachedCompletionRate = weeklyTasks.isEmpty ? 0.0 : totalProgress / Double(weeklyTasks.count)
+        } else if weeklyTasks.isEmpty {
+            // Only daily tasks - use today's completion
+            cachedCompletionRate = system.todayCompletionRate
+        } else {
+            // Both daily and weekly - combine them proportionally
+            let dailyProgress = Double(dailyTasks.filter { $0.isCompletedToday() }.count)
+            var weeklyProgress: Double = 0.0
+            for task in weeklyTasks {
+                if case .weeklyTarget(let times) = task.frequency {
+                    let completions = task.completionsThisWeek()
+                    weeklyProgress += min(1.0, Double(completions) / Double(times))
+                }
+            }
+            let totalTasks = dailyTasks.count + weeklyTasks.count
+            cachedCompletionRate = (dailyProgress + weeklyProgress) / Double(totalTasks)
+        }
     }
 
     var body: some View {
         VStack(spacing: 0) {
             // Compact Widget Header
-            VStack(spacing: 16) {
+            VStack(spacing: 20) {
                 // Icon & Name
-                HStack(spacing: 12) {
+                HStack(spacing: 16) {
                     ZStack {
                         Circle()
                             .fill(Color(hex: system.color).opacity(0.15))
-                            .frame(width: 50, height: 50)
+                            .frame(width: 60, height: 60)
 
                         Image(systemName: system.icon)
-                            .font(.title3)
+                            .font(.title2)
                             .foregroundStyle(Color(hex: system.color))
                     }
 
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(system.name)
                             .font(.headline)
                             .fontWeight(.bold)
                             .foregroundStyle(.primary)
                             .lineLimit(2)
 
-                        HStack(spacing: 8) {
+                        HStack(spacing: 10) {
                             if !cachedTodaysTasks.isEmpty {
-                                HStack(spacing: 3) {
+                                HStack(spacing: 4) {
                                     Image(systemName: "calendar")
                                         .font(.caption2)
                                     Text("\(cachedTodaysTasks.count)")
@@ -700,7 +727,7 @@ struct SystemWidgetCard: View {
                             }
 
                             if !cachedWeeklyTasks.isEmpty {
-                                HStack(spacing: 3) {
+                                HStack(spacing: 4) {
                                     Image(systemName: "target")
                                         .font(.caption2)
                                     Text("\(cachedWeeklyTasks.count)")
@@ -710,7 +737,7 @@ struct SystemWidgetCard: View {
                             }
 
                             if !cachedDueTests.isEmpty {
-                                HStack(spacing: 3) {
+                                HStack(spacing: 4) {
                                     Image(systemName: "chart.bar.fill")
                                         .font(.caption2)
                                     Text("\(cachedDueTests.count)")
@@ -729,12 +756,12 @@ struct SystemWidgetCard: View {
                     ZStack {
                         Circle()
                             .stroke(Color.gray.opacity(0.2), lineWidth: 4)
-                            .frame(width: 48, height: 48)
+                            .frame(width: 52, height: 52)
 
                         Circle()
                             .trim(from: 0, to: max(0, min(1, cachedCompletionRate)))
                             .stroke(Color(hex: system.color), lineWidth: 4)
-                            .frame(width: 48, height: 48)
+                            .frame(width: 52, height: 52)
                             .rotationEffect(.degrees(-90))
                             .animation(.spring(response: 0.5), value: cachedCompletionRate)
 
@@ -744,8 +771,8 @@ struct SystemWidgetCard: View {
                     }
                 }
             }
-            .padding(16)
-            .frame(maxWidth: .infinity, minHeight: 120)
+            .padding(20)
+            .frame(maxWidth: .infinity, minHeight: 150)
             .background(
                 LinearGradient(
                     colors: [
@@ -780,7 +807,6 @@ struct SystemWidgetCard: View {
                         .foregroundStyle(Color(hex: system.color))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
-                        .background(Color(hex: system.color).opacity(0.1))
                     }
                     .buttonStyle(.plain)
 
@@ -820,7 +846,6 @@ struct SystemWidgetCard: View {
                                 .padding(.bottom, 12)
                             }
                         }
-                        .background(Color(.systemGray6).opacity(0.3))
                     }
                 }
             }
@@ -894,7 +919,6 @@ struct CompactTaskRow: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(isCompleted ? Color(.systemGray6).opacity(0.5) : Color.clear)
         .onAppear {
             refreshCompletion()
         }

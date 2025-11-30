@@ -356,6 +356,70 @@ struct TaskDetailRow: View { }
   - Medium: `.font(.title2)` or `.title3`
   - Small: `.font(.caption2)`
 
+### Background Colors - CRITICAL RULE
+
+**⚠️ NEVER use different shades of grey for sections/subsections within the same card or view**
+
+**The Problem:**
+Creating visual breaks with different background colors (`.systemGray6`, `.systemGray5`, etc.) makes the UI look busy, cluttered, and unprofessional. It breaks the minimalist aesthetic.
+
+**The Rule:**
+```swift
+// ❌ WRONG - Multiple background colors in one component
+VStack {
+    Text("Header")
+        .background(Color(.systemBackground))
+
+    Text("Content")
+        .background(Color(.systemGray6))  // ← Different color!
+
+    Button("Action") { }
+        .background(Color(.systemGray5).opacity(0.5))  // ← Another color!
+}
+
+// ✅ CORRECT - Uniform background throughout
+VStack {
+    Text("Header")
+
+    Text("Content")
+
+    Button("Action") { }
+}
+.background(Color(.systemBackground))  // One background for entire component
+```
+
+**Examples:**
+- **System Cards**: Card header, "Show Tasks" dropdown, and expanded task list must ALL use `Color(.systemBackground)` - no grey sections
+- **Task Rows**: Completed tasks should NOT have a grey background different from the card
+- **Forms/Sheets**: All sections use the same background - no alternating greys
+
+**When Background Color Is Acceptable:**
+- ✅ The ENTIRE card/view (`.background(Color(.systemBackground))`)
+- ✅ Accent colors for semantic meaning (`.green` for completion, `.red` for errors)
+- ❌ Subsections within a card
+- ❌ "Active" vs "inactive" states using grey shades
+
+**Separation Without Color:**
+Use spacing, dividers, and typography instead:
+```swift
+VStack(spacing: 20) {  // ← Spacing separates sections
+    Section1()
+
+    Divider()  // ← Visual separator without color change
+
+    Section2()
+}
+```
+
+**This applies to:**
+- Cards and their subsections
+- Expandable dropdowns
+- List items and rows
+- Modal sheets
+- Settings sections
+
+**Remember:** Clean minimalism = one consistent background color throughout. Use whitespace and typography for hierarchy, not color variations.
+
 ---
 
 ## 🔧 SwiftUI Patterns

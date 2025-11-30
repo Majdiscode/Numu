@@ -103,6 +103,48 @@ final class HabitTask {
     var weekStartDate: Date?  // When current week started
     var reductionPercentage: Double = 0.17  // Default 17% reduction per week
 
+    // HealthKit Integration (CloudKit-compatible backing storage)
+    private var healthKitMetricRaw: String?  // HealthKitMetricType raw value (for specific activity)
+    private var healthKitActivityGroupRaw: String?  // ActivityGroup raw value (for group tracking)
+    var healthKitThreshold: Double = 0.0  // Threshold value (accessible to HealthKitService)
+    private var healthKitComparisonRaw: String = "greaterThanOrEqual"  // ComparisonType
+    var healthKitAutoCompleteEnabled: Bool = false  // Toggle auto-complete (accessible to HealthKitService)
+
+    var healthKitMetric: HealthKitMetricType? {
+        get {
+            guard let raw = healthKitMetricRaw else { return nil }
+            return HealthKitMetricType(rawValue: raw)
+        }
+        set { healthKitMetricRaw = newValue?.rawValue }
+    }
+
+    var healthKitActivityGroup: ActivityGroup? {
+        get {
+            guard let raw = healthKitActivityGroupRaw else { return nil }
+            return ActivityGroup(rawValue: raw)
+        }
+        set { healthKitActivityGroupRaw = newValue?.rawValue }
+    }
+
+    var healthKitComparison: ComparisonType {
+        get { ComparisonType(rawValue: healthKitComparisonRaw) ?? .greaterThanOrEqual }
+        set { healthKitComparisonRaw = newValue.rawValue }
+    }
+
+    var hasHealthKitMapping: Bool {
+        healthKitMetric != nil || healthKitActivityGroup != nil
+    }
+
+    /// Get all metrics to check (either single metric or group's metrics)
+    var healthKitMetricsToCheck: [HealthKitMetricType] {
+        if let group = healthKitActivityGroup {
+            return group.includedActivities
+        } else if let metric = healthKitMetric {
+            return [metric]
+        }
+        return []
+    }
+
     // Relationship to parent System
     var system: System?
 
