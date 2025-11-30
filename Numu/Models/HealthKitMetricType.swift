@@ -43,6 +43,11 @@ enum HealthKitMetricType: String, Codable, CaseIterable {
     case rowingDistance = "HKWorkoutActivityTypeRowing"
     case stairClimbingDistance = "HKWorkoutActivityTypeStairClimbing"
 
+    // Strength Training Workouts
+    case traditionalStrengthTraining = "HKWorkoutActivityTypeTraditionalStrengthTraining"
+    case functionalStrengthTraining = "HKWorkoutActivityTypeFunctionalStrengthTraining"
+    case coreTraining = "HKWorkoutActivityTypeCoreTraining"
+
     // Mindfulness & Sleep
     case mindfulMinutes = "HKCategoryTypeIdentifierMindfulSession"
     case sleepAnalysis = "HKCategoryTypeIdentifierSleepAnalysis"
@@ -79,6 +84,11 @@ enum HealthKitMetricType: String, Codable, CaseIterable {
         case .rowingDistance: return "Rowing Distance"
         case .stairClimbingDistance: return "Stair Climbing Distance"
 
+        // Strength Training Workouts
+        case .traditionalStrengthTraining: return "Strength Training"
+        case .functionalStrengthTraining: return "Functional Strength"
+        case .coreTraining: return "Core Training"
+
         // Mindfulness & Sleep
         case .mindfulMinutes: return "Mindful Minutes"
         case .sleepAnalysis: return "Sleep Duration"
@@ -113,6 +123,10 @@ enum HealthKitMetricType: String, Codable, CaseIterable {
              .rowingDistance, .stairClimbingDistance:
             return "km"
 
+        // Strength Training Workouts (just checking if workout exists, no unit)
+        case .traditionalStrengthTraining, .functionalStrengthTraining, .coreTraining:
+            return "workout"
+
         // Mindfulness & Sleep
         case .mindfulMinutes: return "min"
         case .sleepAnalysis: return "hr"
@@ -138,7 +152,8 @@ enum HealthKitMetricType: String, Codable, CaseIterable {
         case .stepCount, .distance, .activeEnergy, .exerciseMinutes,
              .walkingDistance, .runningDistance, .cyclingDistance,
              .swimmingDistance, .hikingDistance, .ellipticalDistance,
-             .rowingDistance, .stairClimbingDistance:
+             .rowingDistance, .stairClimbingDistance,
+             .traditionalStrengthTraining, .functionalStrengthTraining, .coreTraining:
             return .activity
         case .mindfulMinutes, .sleepAnalysis:
             return .mindfulness
@@ -168,6 +183,11 @@ enum HealthKitMetricType: String, Codable, CaseIterable {
         case .rowingDistance: return "figure.rower"
         case .stairClimbingDistance: return "figure.stairs"
 
+        // Strength Training Workouts
+        case .traditionalStrengthTraining: return "dumbbell.fill"
+        case .functionalStrengthTraining: return "figure.strengthtraining.functional"
+        case .coreTraining: return "figure.core.training"
+
         // Mindfulness & Sleep
         case .mindfulMinutes: return "brain.head.profile"
         case .sleepAnalysis: return "bed.double.fill"
@@ -195,7 +215,8 @@ enum HealthKitMetricType: String, Codable, CaseIterable {
         // Workout-based activity types (use HKWorkoutType for authorization)
         case .walkingDistance, .runningDistance, .cyclingDistance,
              .swimmingDistance, .hikingDistance, .ellipticalDistance,
-             .rowingDistance, .stairClimbingDistance:
+             .rowingDistance, .stairClimbingDistance,
+             .traditionalStrengthTraining, .functionalStrengthTraining, .coreTraining:
             return HKWorkoutType.workoutType()
 
         // Quantity types
@@ -221,6 +242,8 @@ enum HealthKitMetricType: String, Codable, CaseIterable {
              .swimmingDistance, .hikingDistance, .ellipticalDistance,
              .rowingDistance, .stairClimbingDistance:
             return HKUnit.meter()  // All activity distances use meters
+        case .traditionalStrengthTraining, .functionalStrengthTraining, .coreTraining:
+            return HKUnit.count()  // Just counting if workout exists (will return 1 or 0)
         case .activeEnergy, .calorieIntake: return HKUnit.kilocalorie()
         case .exerciseMinutes, .mindfulMinutes: return HKUnit.minute()
         case .sleepAnalysis: return HKUnit.hour()
@@ -245,6 +268,9 @@ enum HealthKitMetricType: String, Codable, CaseIterable {
         case .ellipticalDistance: return .elliptical
         case .rowingDistance: return .rowing
         case .stairClimbingDistance: return .stairs
+        case .traditionalStrengthTraining: return .traditionalStrengthTraining
+        case .functionalStrengthTraining: return .functionalStrengthTraining
+        case .coreTraining: return .coreTraining
         default: return nil
         }
     }
@@ -313,7 +339,7 @@ enum ActivityGroup: String, Codable, CaseIterable {
         case .anyCardio:
             return "Running, Cycling, Swimming, Walking, Hiking, Elliptical, Rowing, Stairs"
         case .anyStrength:
-            return "Weight Training, Functional Strength, Core Training"
+            return "Traditional Strength Training, Functional Strength, Core Training (e.g., workouts from Hevy, Strong, etc.)"
         case .anyMindfulness:
             return "Meditation, Yoga, Mindful Sessions"
         case .specificActivity:
@@ -329,7 +355,7 @@ enum ActivityGroup: String, Codable, CaseIterable {
                     .walkingDistance, .hikingDistance, .ellipticalDistance,
                     .rowingDistance, .stairClimbingDistance]
         case .anyStrength:
-            return [.activeEnergy]  // Will check for any workout with high active energy
+            return [.traditionalStrengthTraining, .functionalStrengthTraining, .coreTraining]
         case .anyMindfulness:
             return [.mindfulMinutes]
         case .specificActivity:

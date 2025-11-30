@@ -158,14 +158,23 @@ class HealthKitService {
                     return
                 }
 
-                // Sum up total distance from all matching workouts
-                let totalDistance = workouts.reduce(0.0) { sum, workout in
-                    guard let distance = workout.totalDistance else { return sum }
-                    return sum + distance.doubleValue(for: unit)
+                // For strength training workouts (no distance), just return 1.0 if workout exists
+                // For distance-based workouts, sum up total distance
+                if activityType == .traditionalStrengthTraining ||
+                   activityType == .functionalStrengthTraining ||
+                   activityType == .coreTraining {
+                    // Strength training: just check if workout exists
+                    print("✅ [HealthKit] \(metric.displayName): Workout detected (\(workouts.count) workouts)")
+                    continuation.resume(returning: 1.0)
+                } else {
+                    // Distance-based activities: sum total distance
+                    let totalDistance = workouts.reduce(0.0) { sum, workout in
+                        guard let distance = workout.totalDistance else { return sum }
+                        return sum + distance.doubleValue(for: unit)
+                    }
+                    print("✅ [HealthKit] \(metric.displayName): \(totalDistance) meters (\(workouts.count) workouts)")
+                    continuation.resume(returning: totalDistance)
                 }
-
-                print("✅ [HealthKit] \(metric.displayName): \(totalDistance) meters (\(workouts.count) workouts)")
-                continuation.resume(returning: totalDistance)
             }
 
             healthStore.execute(query)
