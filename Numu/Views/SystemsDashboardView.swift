@@ -695,84 +695,47 @@ struct SystemWidgetCard: View {
     var body: some View {
         VStack(spacing: 0) {
             // Compact Widget Header
-            VStack(spacing: 20) {
-                // Icon & Name
-                HStack(spacing: 16) {
-                    ZStack {
-                        Circle()
-                            .fill(Color(hex: system.color).opacity(0.15))
-                            .frame(width: 60, height: 60)
+            HStack(spacing: 12) {
+                // System Name
+                Text(system.name)
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
 
-                        Image(systemName: system.icon)
-                            .font(.title2)
-                            .foregroundStyle(Color(hex: system.color))
-                    }
+                // Icon (smaller, to the right of name)
+                ZStack {
+                    Circle()
+                        .fill(Color(hex: system.color).opacity(0.15))
+                        .frame(width: 32, height: 32)
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(system.name)
-                            .font(.headline)
-                            .fontWeight(.bold)
-                            .foregroundStyle(.primary)
-                            .lineLimit(2)
+                    Image(systemName: system.icon)
+                        .font(.callout)
+                        .foregroundStyle(Color(hex: system.color))
+                }
 
-                        HStack(spacing: 10) {
-                            if !cachedTodaysTasks.isEmpty {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "calendar")
-                                        .font(.caption2)
-                                    Text("\(cachedTodaysTasks.count)")
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                }
-                            }
+                Spacer()
 
-                            if !cachedWeeklyTasks.isEmpty {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "target")
-                                        .font(.caption2)
-                                    Text("\(cachedWeeklyTasks.count)")
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                }
-                            }
+                // Completion circle
+                ZStack {
+                    Circle()
+                        .stroke(Color.gray.opacity(0.2), lineWidth: 4)
+                        .frame(width: 48, height: 48)
 
-                            if !cachedDueTests.isEmpty {
-                                HStack(spacing: 4) {
-                                    Image(systemName: "chart.bar.fill")
-                                        .font(.caption2)
-                                    Text("\(cachedDueTests.count)")
-                                        .font(.caption)
-                                        .fontWeight(.semibold)
-                                }
-                                .foregroundStyle(.orange)
-                            }
-                        }
-                        .foregroundStyle(.secondary)
-                    }
+                    Circle()
+                        .trim(from: 0, to: max(0, min(1, cachedCompletionRate)))
+                        .stroke(Color(hex: system.color), lineWidth: 4)
+                        .frame(width: 48, height: 48)
+                        .rotationEffect(.degrees(-90))
+                        .animation(.spring(response: 0.5), value: cachedCompletionRate)
 
-                    Spacer()
-
-                    // Smaller completion circle (like before)
-                    ZStack {
-                        Circle()
-                            .stroke(Color.gray.opacity(0.2), lineWidth: 4)
-                            .frame(width: 52, height: 52)
-
-                        Circle()
-                            .trim(from: 0, to: max(0, min(1, cachedCompletionRate)))
-                            .stroke(Color(hex: system.color), lineWidth: 4)
-                            .frame(width: 52, height: 52)
-                            .rotationEffect(.degrees(-90))
-                            .animation(.spring(response: 0.5), value: cachedCompletionRate)
-
-                        Text("\(Int(max(0, min(100, cachedCompletionRate * 100))))")
-                            .font(.caption)
-                            .fontWeight(.bold)
-                    }
+                    Text("\(Int(max(0, min(100, cachedCompletionRate * 100))))")
+                        .font(.caption)
+                        .fontWeight(.bold)
                 }
             }
-            .padding(20)
-            .frame(maxWidth: .infinity, minHeight: 150)
+            .padding(16)
+            .frame(maxWidth: .infinity)
             .background(
                 LinearGradient(
                     colors: [
@@ -804,7 +767,7 @@ struct SystemWidgetCard: View {
                                 .fontWeight(.semibold)
                                 .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         }
-                        .foregroundStyle(Color(hex: system.color))
+                        .foregroundStyle(.white)
                         .padding(.horizontal, 16)
                         .padding(.vertical, 12)
                     }
@@ -852,11 +815,8 @@ struct SystemWidgetCard: View {
         }
         .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .shadow(color: .black.opacity(0.06), radius: 8, x: 0, y: 2)
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(Color(.separator).opacity(0.1), lineWidth: 1)
-        )
+        .cardBorder(cornerRadius: 16, opacity: 0.1)
+        .elevation(.level2)
         .onAppear {
             refreshCache()
         }
