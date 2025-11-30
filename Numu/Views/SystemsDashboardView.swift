@@ -757,19 +757,20 @@ struct SystemWidgetCard: View {
                     } label: {
                         HStack {
                             Text(isExpanded ? "Hide Tasks" : "Show Tasks")
-                                .font(.subheadline)
+                                .font(.callout)
                                 .fontWeight(.semibold)
 
                             Spacer()
 
                             Image(systemName: "chevron.down")
-                                .font(.subheadline)
+                                .font(.callout)
                                 .fontWeight(.semibold)
                                 .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         }
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 12)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 16)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
 

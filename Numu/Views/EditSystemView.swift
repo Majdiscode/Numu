@@ -872,9 +872,24 @@ struct ColorPickerSheet: View {
     @Binding var selectedColor: String
 
     let colors = [
-        "#FF6B35", "#F7931E", "#FDC830", "#C5E99B",
-        "#37E2D5", "#590696", "#1A1A2E", "#E94560",
-        "#FF6B9D", "#C9ADA7", "#4A5899", "#22A39F"
+        // Reds & Oranges
+        "#FF6B35", "#E94560", "#FF4757", "#EE5A6F",
+        "#F7931E", "#FF9F43", "#FDC830", "#F8B500",
+
+        // Pinks & Purples
+        "#FF6B9D", "#E056FD", "#590696", "#A55EEA",
+        "#C471ED", "#8854D0", "#6C5CE7", "#A29BFE",
+
+        // Blues & Teals
+        "#4A5899", "#3742FA", "#1E90FF", "#5F27CD",
+        "#37E2D5", "#22A39F", "#0FBCF9", "#48DBfB",
+
+        // Greens
+        "#C5E99B", "#26DE81", "#20BF6B", "#01A3A4",
+        "#2ECC71", "#00D2D3", "#1ABC9C", "#16A085",
+
+        // Neutrals & Darks
+        "#C9ADA7", "#95A5A6", "#1A1A2E", "#2C3E50"
     ]
 
     var body: some View {
