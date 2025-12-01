@@ -8,9 +8,16 @@
 import SwiftUI
 
 struct ContentView: View {
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
+
     var body: some View {
-        // STAGE 4: Full V2 Architecture with CloudKit sync enabled
-        SystemsDashboardView()
+        if hasCompletedOnboarding {
+            // Main app
+            SystemsDashboardView()
+        } else {
+            // Onboarding flow
+            OnboardingView()
+        }
     }
 }
 
