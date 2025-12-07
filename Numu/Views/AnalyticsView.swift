@@ -55,9 +55,10 @@ struct AnalyticsView: View {
         let cacheAge = now.timeIntervalSince(cacheTimestamp)
 
         // Update cache if:
-        // 1. Time range changed, OR
-        // 2. Cache is older than duration
-        if cacheTimeRange != selectedTimeRange || cacheAge > cacheDuration {
+        // 1. Cache is empty (first load), OR
+        // 2. Time range changed, OR
+        // 3. Cache is older than duration
+        if cachedCompletionData.isEmpty || cacheTimeRange != selectedTimeRange || cacheAge > cacheDuration {
             // Start loading immediately with smooth transition
             isLoadingData = true
 
@@ -119,7 +120,7 @@ struct AnalyticsView: View {
                 // Empty state
                 VStack(spacing: 12) {
                     Image(systemName: "gearshape.2")
-                        .font(.system(size: 40))
+                        .font(.largeTitle)
                         .foregroundStyle(.secondary)
 
                     Text("No systems yet")
@@ -169,7 +170,7 @@ struct AnalyticsView: View {
                     // Empty state
                     VStack(spacing: 12) {
                         Image(systemName: "chart.line.uptrend.xyaxis")
-                            .font(.system(size: 40))
+                            .font(.largeTitle)
                             .foregroundStyle(.secondary)
 
                         Text("No data yet")
@@ -620,8 +621,9 @@ struct SystemCompletionChart: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 12))
+        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 2)
         .onAppear {
             if cachedData.isEmpty || cacheTimeRange != timeRange {
                 cachedData = calculateCompletionData()
@@ -715,13 +717,12 @@ struct TaskAnalyticsRow: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(color: .black.opacity(0.05), radius: 6, x: 0, y: 2)
         .onAppear {
-            if cacheTimeRange != timeRange {
-                cachedStats = calculateCompletionStats()
-                cacheTimeRange = timeRange
-            }
+            cachedStats = calculateCompletionStats()
+            cacheTimeRange = timeRange
         }
         .onChange(of: timeRange) { _, _ in
             cachedStats = calculateCompletionStats()
@@ -938,8 +939,9 @@ struct TestPerformanceCard: View {
             }
         }
         .padding()
-        .background(Color(.systemGray6))
+        .background(Color(.systemBackground))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .shadow(color: .black.opacity(0.05), radius: 6, x: 0, y: 2)
     }
 }
 

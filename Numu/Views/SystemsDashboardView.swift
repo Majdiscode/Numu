@@ -10,7 +10,11 @@ import SwiftData
 
 struct SystemsDashboardView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(HapticManager.self) private var hapticManager
+    @Environment(MotionManager.self) private var motionManager
     @Query private var systems: [System]
+
+    @Namespace private var progressCardNamespace
 
     @State private var showCreateSystem = false
     @State private var cloudKitService = CloudKitService()
@@ -19,6 +23,15 @@ struct SystemsDashboardView: View {
     @State private var showWeeklyCelebration = false
     @State private var previousCompletionRate: Double = 0
     @State private var previousWeeklyCompletionRate: Double = 0
+    @State private var shouldScrollToTop = false
+    @State private var isAnimatingCompletion = false
+    @State private var isInitialLoad = true
+    @State private var isMorphingCards = false
+    @State private var isSheetDismissing = false
+
+    // MARK: - Animated Percentages for Counting Effect
+    @State private var animatedDailyPercentage: Double = 0.0
+    @State private var animatedWeeklyPercentage: Double = 0.0
 
     // MARK: - Performance Optimization: Cached Stats
     @State private var cachedOverallCompletionRate: Double = 0.0
@@ -78,6 +91,9 @@ struct SystemsDashboardView: View {
 
     /// Calculate all dashboard stats in a single pass for optimal performance
     private func refreshDashboardStats() {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        print("📊 [PERF] refreshDashboardStats START")
+
         guard !isDeletingTestData else { return }
         guard !systems.isEmpty else {
             resetCachedStats()
@@ -110,26 +126,198 @@ struct SystemsDashboardView: View {
             tempTotalWeeklyTarget += system.totalWeeklyTarget
         }
 
-        // Update all cached values atomically with animation
-        withAnimation(.easeInOut(duration: 0.2)) {
-            cachedTotalTodaysTasks = tempTotalTodaysTasks
-            cachedTotalCompletedTasks = tempTotalCompletedTasks
-            cachedTotalActiveSystems = tempActiveSystems
-            cachedTotalWeeklyTasks = tempTotalWeeklyTasks
-            cachedTotalCompletedWeeklyTasks = tempCompletedWeeklyTasks
-            cachedTotalWeeklyCompletions = tempTotalWeeklyCompletions
-            cachedTotalWeeklyTarget = tempTotalWeeklyTarget
+        // Calculate new rates
+        let newDailyRate = tempTotalTodaysTasks > 0
+            ? Double(tempTotalCompletedTasks) / Double(tempTotalTodaysTasks)
+            : 0.0
 
-            // Calculate rates
-            cachedOverallCompletionRate = tempTotalTodaysTasks > 0
-                ? Double(tempTotalCompletedTasks) / Double(tempTotalTodaysTasks)
-                : 0.0
+        let newWeeklyRate = tempTotalWeeklyTarget > 0
+            ? min(1.0, max(0.0, Double(tempTotalWeeklyCompletions) / Double(tempTotalWeeklyTarget)))
+            : 0.0
 
-            cachedOverallWeeklyCompletionRate = tempTotalWeeklyTarget > 0
-                ? min(1.0, max(0.0, Double(tempTotalWeeklyCompletions) / Double(tempTotalWeeklyTarget)))
-                : 0.0
+        // Check if we're reaching 100% from a lower value (but not on initial load)
+        let reachingDailyCompletion = !isInitialLoad && newDailyRate == 1.0 && cachedOverallCompletionRate < 1.0 && !systems.isEmpty
+        let reachingWeeklyCompletion = !isInitialLoad && newWeeklyRate == 1.0 && cachedOverallWeeklyCompletionRate < 1.0 && tempTotalWeeklyTasks > 0
 
-            statsNeedRefresh = false
+        if reachingDailyCompletion || reachingWeeklyCompletion {
+            // Delay the stats update to allow system progress ring to animate first
+            isAnimatingCompletion = true
+
+            // Brief pause for system animation (0.3s), then scroll
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                // Scroll to top (if already at top, this completes instantly)
+                shouldScrollToTop = true
+
+                // Wait for potential scroll animation (0.6s spring)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                    // Start pulsing haptic feedback during progress fill
+                    self.startProgressFillHaptics()
+
+                    // Now update the progress bars with smooth 1.0s animation
+                    withAnimation(.easeOut(duration: 1.0)) {
+                        self.updateCachedStats(
+                            todaysTasks: tempTotalTodaysTasks,
+                            completedTasks: tempTotalCompletedTasks,
+                            activeSystems: tempActiveSystems,
+                            weeklyTasks: tempTotalWeeklyTasks,
+                            completedWeeklyTasks: tempCompletedWeeklyTasks,
+                            weeklyCompletions: tempTotalWeeklyCompletions,
+                            weeklyTarget: tempTotalWeeklyTarget,
+                            dailyRate: newDailyRate,
+                            weeklyRate: newWeeklyRate
+                        )
+                    }
+
+                    // Trigger big haptic and celebration after progress bar fills (1.0s animation + small buffer)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.05) {
+                        // Big completion haptic
+                        if reachingDailyCompletion && reachingWeeklyCompletion {
+                            hapticManager.perfectDayCompleted()
+                        } else if reachingDailyCompletion {
+                            hapticManager.dailyGoalCompleted()
+                        } else if reachingWeeklyCompletion {
+                            hapticManager.weeklyGoalCompleted()
+                        }
+
+                        if reachingDailyCompletion {
+                            triggerCelebration(isWeekly: false)
+                        }
+                        if reachingWeeklyCompletion {
+                            triggerCelebration(isWeekly: true)
+                        }
+                        isAnimatingCompletion = false
+                    }
+                }
+            }
+        } else {
+            // Normal update without delays
+            if isInitialLoad {
+                // No animation on initial load to prevent weekly card from animating in
+                updateCachedStats(
+                    todaysTasks: tempTotalTodaysTasks,
+                    completedTasks: tempTotalCompletedTasks,
+                    activeSystems: tempActiveSystems,
+                    weeklyTasks: tempTotalWeeklyTasks,
+                    completedWeeklyTasks: tempCompletedWeeklyTasks,
+                    weeklyCompletions: tempTotalWeeklyCompletions,
+                    weeklyTarget: tempTotalWeeklyTarget,
+                    dailyRate: newDailyRate,
+                    weeklyRate: newWeeklyRate
+                )
+                isInitialLoad = false
+            } else {
+                // Check if card layout is changing (1 card ↔ 2 cards)
+                let oldHasDaily = cachedTotalTodaysTasks > 0
+                let oldHasWeekly = cachedTotalWeeklyTarget > 0
+                let oldCardCount = (oldHasDaily ? 1 : 0) + (oldHasWeekly ? 1 : 0)
+
+                let newHasDaily = tempTotalTodaysTasks > 0
+                let newHasWeekly = tempTotalWeeklyTarget > 0
+                let newCardCount = (newHasDaily ? 1 : 0) + (newHasWeekly ? 1 : 0)
+
+                let isCardLayoutChanging = oldCardCount != newCardCount
+
+                if isCardLayoutChanging {
+                    print("🔄 [PERF] Card layout changing (\(oldCardCount) → \(newCardCount) cards)")
+                    print("🎬 [PERF] Starting 0.8s morph animation NOW")
+
+                    // Slower morph to see performance impact of removing shadows
+                    withAnimation(.easeInOut(duration: 0.8)) {
+                        self.updateCachedStats(
+                            todaysTasks: tempTotalTodaysTasks,
+                            completedTasks: tempTotalCompletedTasks,
+                            activeSystems: tempActiveSystems,
+                            weeklyTasks: tempTotalWeeklyTasks,
+                            completedWeeklyTasks: tempCompletedWeeklyTasks,
+                            weeklyCompletions: tempTotalWeeklyCompletions,
+                            weeklyTarget: tempTotalWeeklyTarget,
+                            dailyRate: newDailyRate,
+                            weeklyRate: newWeeklyRate
+                        )
+                    }
+                } else {
+                    // Normal quick animation for progress updates
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        updateCachedStats(
+                            todaysTasks: tempTotalTodaysTasks,
+                            completedTasks: tempTotalCompletedTasks,
+                            activeSystems: tempActiveSystems,
+                            weeklyTasks: tempTotalWeeklyTasks,
+                            completedWeeklyTasks: tempCompletedWeeklyTasks,
+                            weeklyCompletions: tempTotalWeeklyCompletions,
+                            weeklyTarget: tempTotalWeeklyTarget,
+                            dailyRate: newDailyRate,
+                            weeklyRate: newWeeklyRate
+                        )
+                    }
+                }
+            }
+        }
+
+        let timeElapsed = CFAbsoluteTimeGetCurrent() - startTime
+        print("📊 [PERF] refreshDashboardStats END - took \(String(format: "%.3f", timeElapsed))s")
+    }
+
+    private func updateCachedStats(
+        todaysTasks: Int,
+        completedTasks: Int,
+        activeSystems: Int,
+        weeklyTasks: Int,
+        completedWeeklyTasks: Int,
+        weeklyCompletions: Int,
+        weeklyTarget: Int,
+        dailyRate: Double,
+        weeklyRate: Double
+    ) {
+        cachedTotalTodaysTasks = todaysTasks
+        cachedTotalCompletedTasks = completedTasks
+        cachedTotalActiveSystems = activeSystems
+        cachedTotalWeeklyTasks = weeklyTasks
+        cachedTotalCompletedWeeklyTasks = completedWeeklyTasks
+        cachedTotalWeeklyCompletions = weeklyCompletions
+        cachedTotalWeeklyTarget = weeklyTarget
+
+        // Animate percentage changes
+        let oldDailyPercent = cachedOverallCompletionRate * 100
+        let newDailyPercent = dailyRate * 100
+        let oldWeeklyPercent = cachedOverallWeeklyCompletionRate * 100
+        let newWeeklyPercent = weeklyRate * 100
+
+        // Update the actual rates
+        cachedOverallCompletionRate = dailyRate
+        cachedOverallWeeklyCompletionRate = weeklyRate
+
+        // Animate the displayed percentages
+        animatePercentage(from: oldDailyPercent, to: newDailyPercent, isWeekly: false)
+        animatePercentage(from: oldWeeklyPercent, to: newWeeklyPercent, isWeekly: true)
+
+        statsNeedRefresh = false
+    }
+
+    private func animatePercentage(from oldValue: Double, to newValue: Double, isWeekly: Bool) {
+        let difference = abs(newValue - oldValue)
+
+        // Skip animation if no change
+        guard difference > 0.1 else {
+            if isWeekly {
+                animatedWeeklyPercentage = newValue
+            } else {
+                animatedDailyPercentage = newValue
+            }
+            return
+        }
+
+        // Duration scales with difference: 0.03s per percentage point for visible counting
+        // Examples: 33% change = 1.0s, 50% change = 1.5s, 100% change = 2.0s (capped)
+        let duration = min(2.0, difference * 0.03)
+
+        // Use spring animation for smoother counting effect
+        withAnimation(.spring(response: duration, dampingFraction: 1.0)) {
+            if isWeekly {
+                animatedWeeklyPercentage = newValue
+            } else {
+                animatedDailyPercentage = newValue
+            }
         }
     }
 
@@ -143,14 +331,29 @@ struct SystemsDashboardView: View {
         cachedTotalWeeklyTarget = 0
         cachedTotalTodaysTasks = 0
         cachedTotalCompletedTasks = 0
+        animatedDailyPercentage = 0.0
+        animatedWeeklyPercentage = 0.0
+        isInitialLoad = true
+    }
+
+    // MARK: - Haptic Feedback
+
+    /// Creates a pulsing haptic pattern during progress bar fill
+    private func startProgressFillHaptics() {
+        let impactGenerator = UIImpactFeedbackGenerator(style: .light)
+        impactGenerator.prepare()
+
+        // Create 6 pulses over 1.0 second to match progress animation (one every ~0.167s)
+        let pulseInterval: TimeInterval = 0.167
+        for i in 0..<6 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + (pulseInterval * Double(i))) {
+                impactGenerator.impactOccurred(intensity: 0.5)
+            }
+        }
     }
 
     // MARK: - Celebration
     private func triggerCelebration(isWeekly: Bool = false) {
-        // Haptic feedback
-        let generator = UINotificationFeedbackGenerator()
-        generator.notificationOccurred(.success)
-
         // Show confetti animation
         withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
             if isWeekly {
@@ -179,22 +382,45 @@ struct SystemsDashboardView: View {
                 Color(.systemGroupedBackground)
                     .ignoresSafeArea()
 
-                ScrollView {
-                    VStack(spacing: 24) {
-                        // MARK: - CloudKit Status Banner
-                        if cloudKitService.syncStatus == .notSignedIn {
-                            cloudKitStatusBanner
-                        }
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            // MARK: - CloudKit Status Banner
+                            if cloudKitService.syncStatus == .notSignedIn {
+                                cloudKitStatusBanner
+                            }
 
-                        // MARK: - Overall Progress
-                        if !systems.isEmpty {
-                            overallProgressCard
-                        }
+                            // MARK: - Progress Cards
+                            if !systems.isEmpty || totalWeeklyTasks > 0 {
+                                let hasDaily = !systems.isEmpty
+                                let hasWeekly = totalWeeklyTasks > 0
 
-                        // MARK: - Weekly Progress
-                        if totalWeeklyTasks > 0 {
-                            weeklyProgressCard
-                        }
+                                if hasDaily && hasWeekly {
+                                    // Two cards - use circular rings side by side
+                                    HStack(spacing: 12) {
+                                        overallProgressCard
+                                            .matchedGeometryEffect(id: "dailyCard", in: progressCardNamespace)
+                                            .transition(.opacity)
+
+                                        weeklyProgressCard
+                                            .matchedGeometryEffect(id: "weeklyCard", in: progressCardNamespace)
+                                            .transition(.opacity)
+                                    }
+                                    .id("dualCards")
+                                } else if hasDaily {
+                                    // Single daily card - use horizontal bar
+                                    singleDailyProgressCard
+                                        .matchedGeometryEffect(id: "dailyCard", in: progressCardNamespace)
+                                        .transition(.opacity)
+                                        .id("singleDaily")
+                                } else {
+                                    // Single weekly card - use horizontal bar
+                                    singleWeeklyProgressCard
+                                        .matchedGeometryEffect(id: "weeklyCard", in: progressCardNamespace)
+                                        .transition(.opacity)
+                                        .id("singleWeekly")
+                                }
+                            }
 
                         // MARK: - Systems List
                         systemsList
@@ -203,8 +429,22 @@ struct SystemsDashboardView: View {
                         if systems.isEmpty {
                             emptyState
                         }
+                        }
+                        .padding(.horizontal)
+                        .padding(.top, 8)
+                        .padding(.bottom)
                     }
-                    .padding()
+                    .onChange(of: shouldScrollToTop) { _, newValue in
+                        if newValue {
+                            withAnimation(.spring(response: 0.6)) {
+                                proxy.scrollTo("progressCards", anchor: .top)
+                            }
+                            // Reset after scrolling
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                                shouldScrollToTop = false
+                            }
+                        }
+                    }
                 }
                 .blur(radius: isDeletingTestData ? 10 : 0)
 
@@ -235,25 +475,54 @@ struct SystemsDashboardView: View {
                         .allowsHitTesting(false)
                 }
             }
-            .navigationTitle("Systems")
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text("Progress")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                }
+
                 ToolbarItem(placement: .primaryAction) {
                     Button {
+                        // Haptic feedback
+                        let impact = UIImpactFeedbackGenerator(style: .medium)
+                        impact.impactOccurred()
+
                         showCreateSystem = true
                     } label: {
                         Image(systemName: "plus.circle.fill")
-                            .font(.title2)
+                            .font(.title3)
                     }
                 }
 
                 #if DEBUG
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        handleDebugTap()
-                    } label: {
-                        Image(systemName: "ant.circle")
-                            .font(.title3)
-                            .foregroundStyle(.secondary)
+                    HStack(spacing: 12) {
+                        Button {
+                            createTestWeeklySystem()
+                        } label: {
+                            Image(systemName: "plus.square.fill.on.square.fill")
+                                .font(.title3)
+                                .foregroundStyle(.blue)
+                        }
+
+                        Button {
+                            deleteAllWeeklySystems()
+                        } label: {
+                            Image(systemName: "trash.square.fill")
+                                .font(.title3)
+                                .foregroundStyle(.red)
+                        }
+
+                        Button {
+                            handleDebugTap()
+                        } label: {
+                            Image(systemName: "ant.circle")
+                                .font(.title3)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
                 #endif
@@ -270,7 +539,30 @@ struct SystemsDashboardView: View {
                 cloudKitService.checkAccountStatus()
                 refreshDashboardStats()
             }
-            .onChange(of: systems.count) { _, _ in
+            .onChange(of: showCreateSystem) { _, isShowing in
+                if !isShowing {
+                    print("📋 [SHEET] CreateSystem sheet dismissed")
+                    print("⏳ [SHEET] Waiting 0.5s for sheet animation to complete...")
+                    isSheetDismissing = true
+
+                    // Delay stats refresh until sheet dismissal animation is complete
+                    // This prevents the morph animation from competing with the sheet slide-down
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        print("✅ [SHEET] Sheet animation complete, refreshing stats")
+                        isSheetDismissing = false
+                        refreshDashboardStats()
+                    }
+                }
+            }
+            .onChange(of: systems.count) { oldCount, newCount in
+                print("📊 [SYSTEMS] Count changed: \(oldCount) → \(newCount)")
+
+                // Skip refresh if sheet is dismissing - the delayed handler will do it
+                guard !isSheetDismissing else {
+                    print("⏭️  [SYSTEMS] Skipping refresh - sheet is dismissing")
+                    return
+                }
+
                 refreshDashboardStats()
             }
             .onChange(of: isDeletingTestData) { _, newValue in
@@ -292,6 +584,56 @@ struct SystemsDashboardView: View {
     #if DEBUG
     private func handleDebugTap() {
         showDebugMenu = true
+    }
+
+    private func createTestWeeklySystem() {
+        print("🔵 [DEBUG] Creating test weekly system via hotkey")
+        let testSystem = System(
+            name: "Test Weekly System",
+            category: .athletics,
+            color: "3B82F6",
+            icon: "figure.run"
+        )
+        modelContext.insert(testSystem)
+
+        // Add a weekly task
+        let weeklyTask = HabitTask(
+            name: "Weekly Workout",
+            frequency: .weeklyTarget(times: 3),
+            habitType: .positive
+        )
+        weeklyTask.system = testSystem
+        modelContext.insert(weeklyTask)
+
+        try? modelContext.save()
+        print("🔵 [DEBUG] Test system saved, waiting 0.5s for view preparation...")
+
+        // Add same delay as manual creation for consistent smooth animations
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            print("🔵 [DEBUG] Calling refreshDashboardStats")
+            refreshDashboardStats()
+        }
+    }
+
+    private func deleteAllWeeklySystems() {
+        // Find all systems that have weekly tasks
+        let systemsToDelete = systems.filter { system in
+            guard let tasks = system.tasks else { return false }
+            return tasks.contains { task in
+                if case .weeklyTarget = task.frequency {
+                    return true
+                }
+                return false
+            }
+        }
+
+        // Delete them
+        for system in systemsToDelete {
+            modelContext.delete(system)
+        }
+
+        try? modelContext.save()
+        refreshDashboardStats()
     }
     #endif
 
@@ -339,43 +681,26 @@ struct SystemsDashboardView: View {
         .elevation(.level1)
     }
 
-    // MARK: - Overall Progress Card
-    private var overallProgressCard: some View {
+    // MARK: - Single Daily Progress Card (Horizontal Bar)
+    private var singleDailyProgressCard: some View {
         VStack(spacing: 16) {
-            HStack {
+            HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Today's Progress")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
+                    Text("Today")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
 
-                    Text("\(Int(overallCompletionRate * 100))%")
+                    Text("\(Int(animatedDailyPercentage))%")
                         .font(.system(size: 48, weight: .bold, design: .rounded))
-                        .onChange(of: overallCompletionRate) { oldValue, newValue in
-                            // Trigger celebration when reaching 100%
-                            if newValue == 1.0 && oldValue < 1.0 && !systems.isEmpty {
-                                triggerCelebration()
-                            }
-                            previousCompletionRate = newValue
-                        }
+                        .monospacedDigit()
+                        .contentTransition(.numericText(countsDown: false))
                 }
 
                 Spacer()
-
-                VStack(alignment: .trailing, spacing: 8) {
-                    HStack(spacing: 4) {
-                        Text("\(totalCompletedTasks)")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        Text("/ \(totalTodaysTasks)")
-                            .foregroundStyle(.secondary)
-                    }
-                    Text("tasks")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
 
-            // Progress Bar
+            // Horizontal Progress Bar
             GeometryReader { geometry in
                 let filledWidth = geometry.size.width * overallCompletionRate
 
@@ -384,16 +709,14 @@ struct SystemsDashboardView: View {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.gray.opacity(0.2))
 
-                    // Full-width gradient layer
+                    // Gradient progress bar
                     RoundedRectangle(cornerRadius: 8)
                         .fill(progressBarGradient)
-                        .frame(width: geometry.size.width) // FULL width
+                        .frame(width: geometry.size.width)
                         .mask(
-                            // Mask to only show the filled portion from the left (with rounded end)
                             HStack(spacing: 0) {
                                 RoundedRectangle(cornerRadius: 8)
                                     .frame(width: filledWidth)
-                                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: filledWidth)
                                 Spacer(minLength: 0)
                             }
                         )
@@ -401,26 +724,184 @@ struct SystemsDashboardView: View {
             }
             .frame(height: 12)
 
-            Text(motivationalMessage)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            HStack(spacing: 4) {
+                Text("\(totalCompletedTasks)")
+                    .font(.callout)
+                    .fontWeight(.bold)
+                Text("/ \(totalTodaysTasks)")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(20)
-        .background(
-            // Subtle gradient for depth
-            LinearGradient(
-                colors: [
-                    Color(.systemBackground),
-                    Color(.systemBackground).opacity(0.95)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .background(.ultraThickMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .cardBorder(cornerRadius: 16, opacity: 0.1)
-        .elevation(.level2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.5),
+                            Color.white.opacity(0.1),
+                            Color.white.opacity(0.0)
+                        ],
+                        startPoint: motionGradientPoints().start,
+                        endPoint: motionGradientPoints().end
+                    ),
+                    lineWidth: 1
+                )
+        )
+    }
+
+    // MARK: - Single Weekly Progress Card (Horizontal Bar)
+    private var singleWeeklyProgressCard: some View {
+        VStack(spacing: 16) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Weekly")
+                        .font(.caption)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+
+                    Text("\(Int(min(100, max(0, animatedWeeklyPercentage))))%")
+                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .contentTransition(.numericText(countsDown: false))
+                }
+
+                Spacer()
+            }
+
+            // Horizontal Progress Bar
+            GeometryReader { geometry in
+                let safeRate = min(1.0, max(0.0, overallWeeklyCompletionRate))
+                let filledWidth = max(0, min(geometry.size.width, geometry.size.width * safeRate))
+
+                ZStack(alignment: .leading) {
+                    // Background
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+
+                    // Gradient progress bar
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(progressBarGradient)
+                        .frame(width: geometry.size.width)
+                        .mask(
+                            HStack(spacing: 0) {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .frame(width: filledWidth)
+                                Spacer(minLength: 0)
+                            }
+                        )
+                }
+            }
+            .frame(height: 12)
+
+            HStack(spacing: 4) {
+                Text("\(max(0, totalWeeklyCompletions))")
+                    .font(.callout)
+                    .fontWeight(.bold)
+                Text("/ \(max(0, totalWeeklyTarget))")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(20)
+        .background(.ultraThickMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.5),
+                            Color.white.opacity(0.1),
+                            Color.white.opacity(0.0)
+                        ],
+                        startPoint: motionGradientPoints().start,
+                        endPoint: motionGradientPoints().end
+                    ),
+                    lineWidth: 1
+                )
+        )
+    }
+
+    // MARK: - Overall Progress Card (Circular Ring - for dual card layout)
+    private var overallProgressCard: some View {
+        VStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Today")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Circular Progress
+            ZStack {
+                // Background ring
+                Circle()
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 10)
+                    .frame(width: 80, height: 80)
+
+                // Gradient progress ring
+                Circle()
+                    .trim(from: 0, to: max(0, min(1, overallCompletionRate)))
+                    .stroke(
+                        AngularGradient(
+                            colors: [
+                                Color(red: 0.2, green: 0.6, blue: 1.0),        // Electric blue
+                                Color(red: 0.0, green: 0.8, blue: 1.0),        // Vivid cyan
+                                Color(red: 0.7, green: 0.3, blue: 1.0),        // Bright purple
+                                Color(red: 1.0, green: 0.2, blue: 0.9),        // Hot magenta
+                                Color(red: 0.2, green: 0.6, blue: 1.0)         // Back to electric blue
+                            ],
+                            center: .center
+                        ),
+                        style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                    )
+                    .frame(width: 80, height: 80)
+                    .rotationEffect(.degrees(-90))
+
+                // Percentage text with counting animation
+                Text("\(Int(animatedDailyPercentage))%")
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .monospacedDigit()
+                    .contentTransition(.numericText(countsDown: false))
+            }
+
+            HStack(spacing: 4) {
+                Text("\(totalCompletedTasks)")
+                    .font(.callout)
+                    .fontWeight(.bold)
+                Text("/ \(totalTodaysTasks)")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .background(.ultraThickMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.5),
+                            Color.white.opacity(0.1),
+                            Color.white.opacity(0.0)
+                        ],
+                        startPoint: motionGradientPoints().start,
+                        endPoint: motionGradientPoints().end
+                    ),
+                    lineWidth: 1
+                )
+        )
     }
 
     private var totalTodaysTasks: Int {
@@ -469,88 +950,78 @@ struct SystemsDashboardView: View {
 
     // MARK: - Weekly Progress Card
     private var weeklyProgressCard: some View {
-        VStack(spacing: 16) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Weekly Goals")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
+        VStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Weekly")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-                    Text("\(Int(min(100, max(0, overallWeeklyCompletionRate * 100))))%")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
-                        .onChange(of: overallWeeklyCompletionRate) { oldValue, newValue in
-                            // Trigger celebration when reaching 100%
-                            if newValue == 1.0 && oldValue < 1.0 && totalWeeklyTasks > 0 {
-                                triggerCelebration(isWeekly: true)
-                            }
-                            previousWeeklyCompletionRate = newValue
-                        }
-                }
+            // Circular Progress
+            ZStack {
+                // Background ring
+                Circle()
+                    .stroke(Color.gray.opacity(0.2), lineWidth: 10)
+                    .frame(width: 80, height: 80)
 
-                Spacer()
+                // Gradient progress ring
+                Circle()
+                    .trim(from: 0, to: max(0, min(1, overallWeeklyCompletionRate)))
+                    .stroke(
+                        AngularGradient(
+                            colors: [
+                                Color(red: 0.2, green: 0.6, blue: 1.0),        // Electric blue
+                                Color(red: 0.0, green: 0.8, blue: 1.0),        // Vivid cyan
+                                Color(red: 0.7, green: 0.3, blue: 1.0),        // Bright purple
+                                Color(red: 1.0, green: 0.2, blue: 0.9),        // Hot magenta
+                                Color(red: 0.2, green: 0.6, blue: 1.0)         // Back to electric blue
+                            ],
+                            center: .center
+                        ),
+                        style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                    )
+                    .frame(width: 80, height: 80)
+                    .rotationEffect(.degrees(-90))
 
-                VStack(alignment: .trailing, spacing: 8) {
-                    HStack(spacing: 4) {
-                        Text("\(max(0, totalWeeklyCompletions))")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                        Text("/ \(max(0, totalWeeklyTarget))")
-                            .foregroundStyle(.secondary)
-                    }
-                    Text("completions")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                // Percentage text with counting animation
+                Text("\(Int(min(100, max(0, animatedWeeklyPercentage))))%")
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .monospacedDigit()
+                    .contentTransition(.numericText(countsDown: false))
             }
 
-            // Progress Bar
-            GeometryReader { geometry in
-                // Clamp filledWidth to valid range
-                let safeRate = min(1.0, max(0.0, overallWeeklyCompletionRate))
-                let filledWidth = max(0, min(geometry.size.width, geometry.size.width * safeRate))
-
-                ZStack(alignment: .leading) {
-                    // Background
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-
-                    // Full-width gradient layer
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(progressBarGradient)
-                        .frame(width: geometry.size.width) // FULL width
-                        .mask(
-                            // Mask to only show the filled portion from the left (with rounded end)
-                            HStack(spacing: 0) {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .frame(width: filledWidth)
-                                    .animation(.spring(response: 0.5, dampingFraction: 0.8), value: filledWidth)
-                                Spacer(minLength: 0)
-                            }
-                        )
-                }
+            HStack(spacing: 4) {
+                Text("\(max(0, totalWeeklyCompletions))")
+                    .font(.callout)
+                    .fontWeight(.bold)
+                Text("/ \(max(0, totalWeeklyTarget))")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
             }
-            .frame(height: 12)
-
-            Text(weeklyMotivationalMessage)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(20)
-        .background(
-            // Subtle gradient for depth
-            LinearGradient(
-                colors: [
-                    Color(.systemBackground),
-                    Color(.systemBackground).opacity(0.95)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-        )
+        .frame(maxWidth: .infinity)
+        .padding(16)
+        .background(.ultraThickMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .cardBorder(cornerRadius: 16, opacity: 0.1)
-        .elevation(.level2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.5),
+                            Color.white.opacity(0.1),
+                            Color.white.opacity(0.0)
+                        ],
+                        startPoint: motionGradientPoints().start,
+                        endPoint: motionGradientPoints().end
+                    ),
+                    lineWidth: 1
+                )
+        )
     }
 
     private var weeklyMotivationalMessage: String {
@@ -578,7 +1049,7 @@ struct SystemsDashboardView: View {
             // Don't render systems during deletion to avoid accessing deleted objects
             if !isDeletingTestData && !systems.isEmpty {
                 HStack {
-                    Text("Your Systems")
+                    Text("Systems")
                         .font(.title2)
                         .fontWeight(.bold)
 
@@ -611,7 +1082,8 @@ struct SystemsDashboardView: View {
     private var emptyState: some View {
         VStack(spacing: 16) {
             Image(systemName: "gearshape.2")
-                .font(.system(size: 60))
+                .font(.largeTitle)
+                .imageScale(.large)
                 .foregroundStyle(.blue)
 
             Text("Build Your Systems")
@@ -638,12 +1110,37 @@ struct SystemsDashboardView: View {
         }
         .padding(32)
     }
+
+    // MARK: - Motion-Reactive Shimmer Helper
+
+    /// Computes gradient start and end points from light angle
+    /// Light angle represents where light comes from (0° = right, 90° = bottom, 180° = left, 270° = top)
+    private func motionGradientPoints() -> (start: UnitPoint, end: UnitPoint) {
+        let angle = motionManager.lightAngle.radians
+
+        // Calculate the light source position (where light comes from)
+        let lightX = (cos(angle) + 1.0) / 2.0  // Map -1...1 to 0...1
+        let lightY = (sin(angle) + 1.0) / 2.0  // Map -1...1 to 0...1
+
+        // Start point is where light originates (bright)
+        let startPoint = UnitPoint(x: lightX, y: lightY)
+
+        // End point is opposite side (dim)
+        let endX = 1.0 - lightX
+        let endY = 1.0 - lightY
+        let endPoint = UnitPoint(x: endX, y: endY)
+
+        return (startPoint, endPoint)
+    }
 }
 
 // MARK: - System Widget Card (Compact 2-Column Layout)
 struct SystemWidgetCard: View {
     let system: System
     let modelContext: ModelContext
+
+    @Environment(HapticManager.self) private var hapticManager
+    @Environment(MotionManager.self) private var motionManager
 
     // Performance optimization: Cache expensive calculations
     @State private var cachedTodaysTasks: [HabitTask] = []
@@ -716,15 +1213,42 @@ struct SystemWidgetCard: View {
 
                 Spacer()
 
-                // Completion circle
+                // Completion circle with 3D glossy effect
                 ZStack {
+                    // Background ring
                     Circle()
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 4)
+                        .stroke(
+                            AngularGradient(
+                                colors: [
+                                    Color.gray.opacity(0.12),
+                                    Color.gray.opacity(0.2),
+                                    Color.gray.opacity(0.12)
+                                ],
+                                center: .center,
+                                startAngle: .degrees(0),
+                                endAngle: .degrees(360)
+                            ),
+                            lineWidth: 5
+                        )
                         .frame(width: 48, height: 48)
 
+                    // Foreground progress ring with glossy gradient (white to bright)
                     Circle()
                         .trim(from: 0, to: max(0, min(1, cachedCompletionRate)))
-                        .stroke(Color(hex: system.color), lineWidth: 4)
+                        .stroke(
+                            AngularGradient(
+                                colors: [
+                                    Color.white.opacity(0.7),           // Whitish highlight
+                                    Color(hex: system.color),            // Bright color
+                                    Color(hex: system.color).opacity(0.8), // Mid
+                                    Color.white.opacity(0.7)             // Back to whitish
+                                ],
+                                center: .center,
+                                startAngle: .degrees(0),
+                                endAngle: .degrees(360)
+                            ),
+                            style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                        )
                         .frame(width: 48, height: 48)
                         .rotationEffect(.degrees(-90))
                         .animation(.spring(response: 0.5), value: cachedCompletionRate)
@@ -736,21 +1260,16 @@ struct SystemWidgetCard: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity)
-            .background(
-                LinearGradient(
-                    colors: [
-                        Color(.systemBackground),
-                        Color(.systemBackground).opacity(0.95)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            )
+            .background(Color(.secondarySystemGroupedBackground))
 
             // Expandable Tasks Dropdown
             if !cachedTodaysTasks.isEmpty || !cachedWeeklyTasks.isEmpty {
                 VStack(spacing: 0) {
                     Button {
+                        // More noticeable haptic for expansion
+                        let impact = UIImpactFeedbackGenerator(style: .medium)
+                        impact.impactOccurred()
+
                         withAnimation(.easeInOut(duration: 0.25)) {
                             isExpanded.toggle()
                         }
@@ -814,10 +1333,26 @@ struct SystemWidgetCard: View {
                 }
             }
         }
-        .background(Color(.systemBackground))
+        .background(.ultraThinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 16))
-        .cardBorder(cornerRadius: 16, opacity: 0.1)
-        .elevation(.level2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 16)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.5),
+                            Color.white.opacity(0.1),
+                            Color.white.opacity(0.0)
+                        ],
+                        startPoint: motionGradientPoints().start,
+                        endPoint: motionGradientPoints().end
+                    ),
+                    lineWidth: 1
+                )
+        )
+        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
+        .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
         .onAppear {
             refreshCache()
         }
@@ -825,12 +1360,32 @@ struct SystemWidgetCard: View {
             refreshCache()
         }
     }
+
+    // MARK: - Motion-Reactive Shimmer Helper
+
+    private func motionGradientPoints() -> (start: UnitPoint, end: UnitPoint) {
+        let angle = motionManager.lightAngle.radians
+
+        let lightX = (cos(angle) + 1.0) / 2.0
+        let lightY = (sin(angle) + 1.0) / 2.0
+
+        let startPoint = UnitPoint(x: lightX, y: lightY)
+
+        let endX = 1.0 - lightX
+        let endY = 1.0 - lightY
+        let endPoint = UnitPoint(x: endX, y: endY)
+
+        return (startPoint, endPoint)
+    }
 }
 
 // MARK: - Compact Task Row (For Widget Cards)
 struct CompactTaskRow: View {
     let task: HabitTask
     let modelContext: ModelContext
+
+    @Environment(HapticManager.self) private var hapticManager
+    @Query private var allSystems: [System]
 
     @State private var isCompleted: Bool = false
     @State private var showCheckIn: Bool = false
@@ -846,7 +1401,7 @@ struct CompactTaskRow: View {
             } label: {
                 let completionColor: Color = task.habitType == .positive ? .green : .orange
                 Image(systemName: isCompleted ? task.habitType.icon : "circle")
-                    .font(.system(size: 20))
+                    .font(.title3)
                     .foregroundStyle(isCompleted ? completionColor : .gray.opacity(0.3))
                     .frame(width: 24, height: 24)
             }
@@ -868,14 +1423,25 @@ struct CompactTaskRow: View {
             Spacer()
 
             if task.currentStreak > 0 {
-                HStack(spacing: 3) {
-                    Image(systemName: task.isStreakAtRisk ? "exclamationmark.triangle.fill" : "flame.fill")
-                        .font(.caption)
-                    Text("\(task.currentStreak)")
-                        .font(.caption)
-                        .fontWeight(.semibold)
+                if task.isStreakAtRisk {
+                    HStack(spacing: 3) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                        Text("\(task.currentStreak)")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundStyle(.yellow)
+                } else {
+                    HStack(spacing: 3) {
+                        Image(systemName: "flame.fill")
+                            .font(.caption)
+                        Text("\(task.currentStreak)")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                    }
+                    .foregroundStyle(streakGradient)
                 }
-                .foregroundStyle(task.isStreakAtRisk ? .yellow : .orange)
             }
         }
         .padding(.horizontal, 16)
@@ -888,8 +1454,21 @@ struct CompactTaskRow: View {
         }
     }
 
+    private var streakGradient: LinearGradient {
+        let brightElectricBlue = Color(red: 0.0, green: 0.6, blue: 1.0) // Bright electric blue
+        let deepBlue = Color(red: 0.0, green: 0.3, blue: 0.8)            // Deep saturated blue
+
+        return LinearGradient(
+            colors: [brightElectricBlue, deepBlue],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+
     private func toggleCompletion() {
         withAnimation(.spring(response: 0.3)) {
+            let wasCompleted = isCompleted
+
             if isCompleted {
                 if let todayLog = task.logs?.first(where: { Calendar.current.isDateInToday($0.date) }) {
                     modelContext.delete(todayLog)
@@ -903,11 +1482,117 @@ struct CompactTaskRow: View {
             do {
                 try modelContext.save()
                 isCompleted.toggle()
+
+                // Trigger haptics
+                if !wasCompleted {
+                    // Completing a task - use appropriate celebration haptic
+                    triggerAppropriateHaptic()
+                } else {
+                    // Unchecking a task - use light haptic
+                    let impact = UIImpactFeedbackGenerator(style: .light)
+                    impact.impactOccurred(intensity: 0.4)
+                }
+
                 NotificationCenter.default.post(name: Notification.Name("TaskCompletionChanged"), object: nil)
             } catch {
                 print("Error toggling task: \(error)")
             }
         }
+    }
+
+    private func triggerAppropriateHaptic() {
+        // Check completion levels and trigger appropriate haptic
+        let dailyStats = calculateDailyCompletion()
+        let weeklyStats = calculateWeeklyCompletion()
+        let systemStats = calculateSystemCompletion()
+
+        // Level 5: Perfect day (both daily and weekly at 100%)
+        if dailyStats.rate == 1.0 && weeklyStats.rate == 1.0 {
+            hapticManager.perfectDayCompleted()
+        }
+        // Level 4: Both goals completed (but check daily first, then weekly)
+        else if dailyStats.rate == 1.0 && weeklyStats.rate == 1.0 {
+            hapticManager.dailyGoalCompleted()
+        }
+        // Level 3: Daily goal completed
+        else if dailyStats.rate == 1.0 {
+            hapticManager.dailyGoalCompleted()
+        }
+        // Level 3: Weekly goal completed
+        else if weeklyStats.rate == 1.0 {
+            hapticManager.weeklyGoalCompleted()
+        }
+        // Level 2: System completed
+        else if systemStats.rate == 1.0 {
+            hapticManager.systemCompleted()
+        }
+        // Level 1: Single task completed
+        else {
+            hapticManager.taskCompleted()
+        }
+    }
+
+    private func calculateSystemCompletion() -> (completed: Int, total: Int, rate: Double) {
+        guard let system = task.system, let tasks = system.tasks else {
+            return (0, 0, 0.0)
+        }
+
+        let today = Calendar.current.startOfDay(for: Date())
+        var completed = 0
+        var total = 0
+
+        for t in tasks {
+            if t.shouldBeCompletedOn(date: today) {
+                total += 1
+                if t.wasCompletedOn(date: today) {
+                    completed += 1
+                }
+            }
+        }
+
+        let rate = total > 0 ? Double(completed) / Double(total) : 0.0
+        return (completed, total, rate)
+    }
+
+    private func calculateDailyCompletion() -> (completed: Int, total: Int, rate: Double) {
+        let today = Calendar.current.startOfDay(for: Date())
+        var completed = 0
+        var total = 0
+
+        for system in allSystems {
+            guard let tasks = system.tasks else { continue }
+            for task in tasks {
+                if task.shouldBeCompletedOn(date: today) {
+                    total += 1
+                    if task.wasCompletedOn(date: today) {
+                        completed += 1
+                    }
+                }
+            }
+        }
+
+        let rate = total > 0 ? Double(completed) / Double(total) : 0.0
+        return (completed, total, rate)
+    }
+
+    private func calculateWeeklyCompletion() -> (completed: Int, total: Int, rate: Double) {
+        let today = Date()
+        var completedWeekly = 0
+        var totalWeekly = 0
+
+        for system in allSystems {
+            guard let tasks = system.tasks else { continue }
+            for task in tasks {
+                if case .weeklyTarget(let times) = task.frequency {
+                    totalWeekly += times
+                    let completions = task.completionsInWeek(containing: today)
+                    completedWeekly += min(completions, times)
+                }
+            }
+        }
+
+        let rate = totalWeekly > 0 ? Double(completedWeekly) / Double(totalWeekly) : 0.0
+        return (completedWeekly, totalWeekly, rate)
     }
 }
 
@@ -915,6 +1600,9 @@ struct CompactTaskRow: View {
 struct TaskRow: View {
     let task: HabitTask
     let modelContext: ModelContext
+
+    @Environment(HapticManager.self) private var hapticManager
+    @Query private var allSystems: [System]
 
     @State private var isCompleted: Bool = false
     @State private var showCheckIn: Bool = false
@@ -925,6 +1613,17 @@ struct TaskRow: View {
 
     var isTimeBased: Bool {
         task.habitType == .negative && task.hasTimeLimit
+    }
+
+    private var streakGradient: LinearGradient {
+        let brightElectricBlue = Color(red: 0.0, green: 0.6, blue: 1.0) // Bright electric blue
+        let deepBlue = Color(red: 0.0, green: 0.3, blue: 0.8)            // Deep saturated blue
+
+        return LinearGradient(
+            colors: [brightElectricBlue, deepBlue],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 
     private func refreshTaskCache() {
@@ -976,28 +1675,32 @@ struct TaskRow: View {
             Spacer()
 
             if cachedCurrentStreak > 0 {
-                HStack(spacing: 4) {
-                    // Show warning icon if streak is at risk (one miss already)
-                    if cachedIsStreakAtRisk {
+                if cachedIsStreakAtRisk {
+                    HStack(spacing: 4) {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .font(.caption2)
-                            .foregroundStyle(.yellow)
-                    } else {
+                        if case .weeklyTarget = task.frequency {
+                            Text("\(cachedCurrentStreak)w")
+                                .font(.caption2)
+                        } else {
+                            Text("\(cachedCurrentStreak)")
+                                .font(.caption2)
+                        }
+                    }
+                    .foregroundStyle(.yellow)
+                } else {
+                    HStack(spacing: 4) {
                         Image(systemName: "flame.fill")
                             .font(.caption2)
-                            .foregroundStyle(.orange)
+                        if case .weeklyTarget = task.frequency {
+                            Text("\(cachedCurrentStreak)w")
+                                .font(.caption2)
+                        } else {
+                            Text("\(cachedCurrentStreak)")
+                                .font(.caption2)
+                        }
                     }
-
-                    // Show week/day based on frequency type
-                    if case .weeklyTarget = task.frequency {
-                        Text("\(cachedCurrentStreak)w")
-                            .font(.caption2)
-                            .foregroundStyle(cachedIsStreakAtRisk ? .yellow : .orange)
-                    } else {
-                        Text("\(cachedCurrentStreak)")
-                            .font(.caption2)
-                            .foregroundStyle(cachedIsStreakAtRisk ? .yellow : .orange)
-                    }
+                    .foregroundStyle(streakGradient)
                 }
             }
         }
@@ -1033,6 +1736,8 @@ struct TaskRow: View {
 
     private func toggleCompletion() {
         withAnimation(.spring(response: 0.3)) {
+            let wasCompleted = isCompleted
+
             if isCompleted {
                 // Remove today's log
                 if let todayLog = task.logs?.first(where: { Calendar.current.isDateInToday($0.date) }) {
@@ -1049,6 +1754,16 @@ struct TaskRow: View {
                 try modelContext.save()
                 isCompleted.toggle()
 
+                // Trigger haptics
+                if !wasCompleted {
+                    // Completing a task - use appropriate celebration haptic
+                    triggerAppropriateHaptic()
+                } else {
+                    // Unchecking a task - use light haptic
+                    let impact = UIImpactFeedbackGenerator(style: .light)
+                    impact.impactOccurred(intensity: 0.4)
+                }
+
                 // Notify dashboard to refresh stats
                 NotificationCenter.default.post(name: Notification.Name("TaskCompletionChanged"), object: nil)
 
@@ -1059,12 +1774,104 @@ struct TaskRow: View {
             }
         }
     }
+
+    private func triggerAppropriateHaptic() {
+        // Check completion levels and trigger appropriate haptic
+        let dailyStats = calculateDailyCompletion()
+        let weeklyStats = calculateWeeklyCompletion()
+        let systemStats = calculateSystemCompletion()
+
+        // Level 5: Perfect day (both daily and weekly at 100%)
+        if dailyStats.rate == 1.0 && weeklyStats.rate == 1.0 {
+            hapticManager.perfectDayCompleted()
+        }
+        // Level 3: Daily goal completed
+        else if dailyStats.rate == 1.0 {
+            hapticManager.dailyGoalCompleted()
+        }
+        // Level 3: Weekly goal completed
+        else if weeklyStats.rate == 1.0 {
+            hapticManager.weeklyGoalCompleted()
+        }
+        // Level 2: System completed
+        else if systemStats.rate == 1.0 {
+            hapticManager.systemCompleted()
+        }
+        // Level 1: Single task completed
+        else {
+            hapticManager.taskCompleted()
+        }
+    }
+
+    private func calculateSystemCompletion() -> (completed: Int, total: Int, rate: Double) {
+        guard let system = task.system, let tasks = system.tasks else {
+            return (0, 0, 0.0)
+        }
+
+        let today = Calendar.current.startOfDay(for: Date())
+        var completed = 0
+        var total = 0
+
+        for t in tasks {
+            if t.shouldBeCompletedOn(date: today) {
+                total += 1
+                if t.wasCompletedOn(date: today) {
+                    completed += 1
+                }
+            }
+        }
+
+        let rate = total > 0 ? Double(completed) / Double(total) : 0.0
+        return (completed, total, rate)
+    }
+
+    private func calculateDailyCompletion() -> (completed: Int, total: Int, rate: Double) {
+        let today = Calendar.current.startOfDay(for: Date())
+        var completed = 0
+        var total = 0
+
+        for system in allSystems {
+            guard let tasks = system.tasks else { continue }
+            for task in tasks {
+                if task.shouldBeCompletedOn(date: today) {
+                    total += 1
+                    if task.wasCompletedOn(date: today) {
+                        completed += 1
+                    }
+                }
+            }
+        }
+
+        let rate = total > 0 ? Double(completed) / Double(total) : 0.0
+        return (completed, total, rate)
+    }
+
+    private func calculateWeeklyCompletion() -> (completed: Int, total: Int, rate: Double) {
+        let today = Date()
+        var completedWeekly = 0
+        var totalWeekly = 0
+
+        for system in allSystems {
+            guard let tasks = system.tasks else { continue }
+            for task in tasks {
+                if case .weeklyTarget(let times) = task.frequency {
+                    totalWeekly += times
+                    let completions = task.completionsInWeek(containing: today)
+                    completedWeekly += min(completions, times)
+                }
+            }
+        }
+
+        let rate = totalWeekly > 0 ? Double(completedWeekly) / Double(totalWeekly) : 0.0
+        return (completedWeekly, totalWeekly, rate)
+    }
 }
 
 // MARK: - Celebration View
 struct CelebrationView: View {
     let isWeekly: Bool
     @State private var isAnimating = false
+    @Environment(MotionManager.self) private var motionManager
 
     private var celebrationEmoji: String {
         isWeekly ? "🏆" : "🎉"
@@ -1107,13 +1914,47 @@ struct CelebrationView: View {
             .padding(32)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 20))
-            .shadow(color: .black.opacity(0.2), radius: 20)
+            .overlay(
+                RoundedRectangle(cornerRadius: 20)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.5),
+                                Color.white.opacity(0.1),
+                                Color.white.opacity(0.0)
+                            ],
+                            startPoint: motionGradientPoints().start,
+                            endPoint: motionGradientPoints().end
+                        ),
+                        lineWidth: 1.5
+                    )
+            )
+            .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
+            .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
+            .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
         }
         .onAppear {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
                 isAnimating = true
             }
         }
+    }
+
+    // MARK: - Motion-Reactive Shimmer Helper
+
+    private func motionGradientPoints() -> (start: UnitPoint, end: UnitPoint) {
+        let angle = motionManager.lightAngle.radians
+
+        let lightX = (cos(angle) + 1.0) / 2.0
+        let lightY = (sin(angle) + 1.0) / 2.0
+
+        let startPoint = UnitPoint(x: lightX, y: lightY)
+
+        let endX = 1.0 - lightX
+        let endY = 1.0 - lightY
+        let endPoint = UnitPoint(x: endX, y: endY)
+
+        return (startPoint, endPoint)
     }
 }
 

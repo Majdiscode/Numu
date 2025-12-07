@@ -279,7 +279,7 @@ struct CalendarView: View {
         } label: {
             VStack(spacing: 4) {
                 Text(date, format: .dateTime.day())
-                    .font(.system(size: 15))
+                    .font(.subheadline)
                     .fontWeight(isToday ? .semibold : .regular)
                     .foregroundStyle(isSelected ? .primary : (isCurrentMonth ? .primary : .tertiary))
 

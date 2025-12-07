@@ -14,31 +14,27 @@ struct OnboardingView: View {
     @State private var currentPage = 0
 
     var body: some View {
-        ZStack {
-            // Background
-            Color(.systemGroupedBackground)
-                .ignoresSafeArea()
+        TabView(selection: $currentPage) {
+            // Page 1: Welcome
+            WelcomePage()
+                .tag(0)
 
-            TabView(selection: $currentPage) {
-                // Page 1: Welcome
-                WelcomePage()
-                    .tag(0)
+            // Page 2: Systems Explained
+            SystemsExplainedPage()
+                .tag(1)
 
-                // Page 2: Systems Explained
-                SystemsExplainedPage()
-                    .tag(1)
+            // Page 3: Identity-Based
+            IdentityBasedPage()
+                .tag(2)
 
-                // Page 3: Identity-Based
-                IdentityBasedPage()
-                    .tag(2)
-
-                // Page 4: Get Started
-                GetStartedPage(onComplete: completeOnboarding)
-                    .tag(3)
-            }
-            .tabViewStyle(.page(indexDisplayMode: .always))
-            .indexViewStyle(.page(backgroundDisplayMode: .always))
+            // Page 4: Get Started
+            GetStartedPage(onComplete: completeOnboarding)
+                .tag(3)
         }
+        .tabViewStyle(.page(indexDisplayMode: .always))
+        .indexViewStyle(.page(backgroundDisplayMode: .always))
+        .background(Color(.systemGroupedBackground))
+        .ignoresSafeArea()
         .interactiveDismissDisabled()
     }
 
@@ -63,13 +59,15 @@ struct WelcomePage: View {
                     .frame(width: 120, height: 120)
 
                 Image(systemName: "gearshape.2.fill")
-                    .font(.system(size: 60))
+                    .font(.largeTitle)
+                    .imageScale(.large)
                     .foregroundStyle(.blue)
             }
 
             VStack(spacing: 16) {
                 Text("Welcome to Numu")
-                    .font(.system(size: 36, weight: .bold, design: .rounded))
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
                     .multilineTextAlignment(.center)
 
                 Text("Build systems, not goals.\nBecome who you want to be.")
@@ -81,7 +79,7 @@ struct WelcomePage: View {
 
             Spacer()
 
-            // Swipe hint
+            // Swipe hint with enough spacing to clear page indicators
             VStack(spacing: 8) {
                 Image(systemName: "chevron.right.2")
                     .font(.title2)
@@ -91,9 +89,9 @@ struct WelcomePage: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            .padding(.bottom, 32)
+            .padding(.bottom, 60)
         }
-        .padding(32)
+        .padding(.horizontal, 32)
     }
 }
 
@@ -106,12 +104,14 @@ struct SystemsExplainedPage: View {
             VStack(spacing: 24) {
                 // Icon
                 Image(systemName: "square.stack.3d.up.fill")
-                    .font(.system(size: 60))
+                    .font(.largeTitle)
+                    .imageScale(.large)
                     .foregroundStyle(.purple)
 
                 // Heading
                 Text("What are Systems?")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(.title)
+                    .fontWeight(.bold)
                     .multilineTextAlignment(.center)
 
                 // Explanation
@@ -141,7 +141,7 @@ struct SystemsExplainedPage: View {
 
             Spacer()
         }
-        .padding(32)
+        .padding(.horizontal, 32)
     }
 }
 
@@ -154,12 +154,14 @@ struct IdentityBasedPage: View {
             VStack(spacing: 24) {
                 // Icon
                 Image(systemName: "sparkles")
-                    .font(.system(size: 60))
+                    .font(.largeTitle)
+                    .imageScale(.large)
                     .foregroundStyle(.yellow)
 
                 // Heading
                 Text("Identity Over Goals")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(.title)
+                    .fontWeight(.bold)
                     .multilineTextAlignment(.center)
 
                 // Quote
@@ -176,8 +178,7 @@ struct IdentityBasedPage: View {
                         .foregroundStyle(.secondary)
                 }
                 .padding(24)
-                .background(Color(.systemGray6).opacity(0.5))
-                .cornerRadius(16)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16))
 
                 // Key Insight
                 VStack(spacing: 12) {
@@ -194,7 +195,7 @@ struct IdentityBasedPage: View {
 
             Spacer()
         }
-        .padding(32)
+        .padding(.horizontal, 32)
     }
 }
 
@@ -209,12 +210,14 @@ struct GetStartedPage: View {
             VStack(spacing: 24) {
                 // Icon
                 Image(systemName: "arrow.right.circle.fill")
-                    .font(.system(size: 60))
+                    .font(.largeTitle)
+                    .imageScale(.large)
                     .foregroundStyle(.green)
 
                 // Heading
                 Text("Ready to Build\nYour Systems?")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .font(.title)
+                    .fontWeight(.bold)
                     .multilineTextAlignment(.center)
 
                 // Features list
@@ -229,22 +232,17 @@ struct GetStartedPage: View {
 
             Spacer()
 
-            // Get Started Button
-            Button {
+            // Get Started Button - using native iOS button style
+            Button("Get Started") {
                 onComplete()
-            } label: {
-                Text("Get Started")
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
-                    .background(Color.blue)
-                    .cornerRadius(12)
             }
-            .padding(.bottom, 32)
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .tint(.blue)
+            .frame(maxWidth: .infinity)
+            .padding(.bottom, 60)
         }
-        .padding(32)
+        .padding(.horizontal, 32)
     }
 }
 

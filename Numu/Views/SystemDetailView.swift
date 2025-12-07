@@ -34,7 +34,7 @@ struct SystemDetailView: View {
             return AnyView(
                 VStack(spacing: 16) {
                     Image(systemName: "exclamationmark.triangle")
-                        .font(.system(size: 48))
+                        .font(.largeTitle)
                         .foregroundStyle(.orange)
 
                     Text("Unable to load system data")
@@ -108,7 +108,7 @@ struct SystemDetailView: View {
                     .frame(width: 100, height: 100)
 
                 Image(systemName: system.icon)
-                    .font(.system(size: 44))
+                    .font(.largeTitle)
                     .foregroundStyle(Color(hex: system.color))
             }
 
@@ -1051,7 +1051,8 @@ struct TestEntryView: View {
                         HStack {
                             TextField("0.0", text: $value)
                                 .keyboardType(.decimalPad)
-                                .font(.system(size: 48, weight: .bold, design: .rounded))
+                                .font(.largeTitle)
+                                .fontWeight(.bold)
                                 .multilineTextAlignment(.center)
 
                             Text(test.unit)

@@ -19,6 +19,7 @@ struct SettingsView: View {
     @AppStorage("endOfDayHour") private var endOfDayHour = 21
     @AppStorage("streakAlertsEnabled") private var streakAlertsEnabled = true
     @AppStorage("streakAlertHour") private var streakAlertHour = 20
+    @AppStorage("hasCompletedOnboarding") private var hasCompletedOnboarding = false
 
     @State private var pendingNotificationCount = 0
 
@@ -249,9 +250,19 @@ struct SettingsView: View {
                     Text("Task Reminders")
                 }
 
+                // MARK: - App Settings
+                Section {
+                    Button("View Onboarding Again") {
+                        hasCompletedOnboarding = false
+                    }
+                } header: {
+                    Text("About")
+                }
+
                 // MARK: - Debug Info
                 #if DEBUG
                 Section {
+
                     HStack {
                         Text("Pending Notifications")
                         Spacer()

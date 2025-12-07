@@ -212,11 +212,17 @@ Before declaring "it doesn't work":
 
 ## ⚠️ CRITICAL RULES (READ FIRST)
 
-### 1. NEVER Build to Simulator
-- **User will run the code themselves**
-- Do NOT use `xcodebuild` or any build commands
-- Do NOT run the app in simulator
-- Only provide code changes - user handles testing
+### 1. Default Build Target: Physical iPhone
+- **Always build to the user's connected physical iPhone** unless otherwise specified
+- This applies to:
+  - Explicit build requests ("build the app", "test this feature")
+  - Automatic verification builds after making code changes
+  - Any testing or validation workflows
+- Physical device provides real-world performance and behavior
+- Simulator only when explicitly requested by user
+- Use Bash tool with `xcodebuild` when building/testing is needed
+- Build commands should target the connected iPhone by default
+- **Important:** When making changes, automatically verify they work by building and running on the physical iPhone
 
 ### 2. No Version Folders
 - **NO V1, V2, V3 folders** - that's what Git is for

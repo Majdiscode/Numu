@@ -14,6 +14,8 @@ struct NumuApp: App {
     let modelContainer: ModelContainer
     @State private var notificationManager = NotificationManager()
     @State private var healthKitService = HealthKitService()
+    @State private var hapticManager = HapticManager()
+    @State private var motionManager = MotionManager()
 
     // Notification delegate for foreground notifications
     @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -115,39 +117,48 @@ struct NumuApp: App {
             MainTabView()
                 .environment(notificationManager)
                 .environment(healthKitService)
+                .environment(hapticManager)
+                .environment(motionManager)
                 .task {
                     // Request notification permissions on first launch
                     if notificationManager.authorizationStatus == .notDetermined {
-                        await notificationManager.requestAuthorization()
+                        _ = await notificationManager.requestAuthorization()
                     }
 
-                    // Request HealthKit authorization and sync on app launch
+                    // Request HealthKit authorization on first launch
                     if healthKitService.isHealthKitAvailable {
-                        // Request authorization if needed
                         if !healthKitService.isAuthorized {
-                            await healthKitService.requestAuthorization()
-                        }
-
-                        // Sync HealthKit data for all mapped tasks
-                        if healthKitService.isAuthorized {
-                            let context = modelContainer.mainContext
-                            let descriptor = FetchDescriptor<HabitTask>()
-
-                            do {
-                                let allTasks = try context.fetch(descriptor)
-                                await healthKitService.checkAllMappedTasksForToday(
-                                    tasks: allTasks,
-                                    modelContext: context
-                                )
-                            } catch {
-                                print("❌ [HealthKit] Failed to fetch tasks for sync: \(error)")
-                            }
+                            _ = await healthKitService.requestAuthorization()
                         }
                     }
                 }
         }
         .modelContainer(modelContainer)
+        .onChange(of: scenePhase) { oldPhase, newPhase in
+            // Sync HealthKit data every time the app becomes active
+            if newPhase == .active {
+                print("🔄 [HealthKit] App became active - syncing...")
+                Task {
+                    if healthKitService.isAuthorized {
+                        let context = modelContainer.mainContext
+                        let descriptor = FetchDescriptor<HabitTask>()
+
+                        do {
+                            let allTasks = try context.fetch(descriptor)
+                            await healthKitService.checkAllMappedTasksForToday(
+                                tasks: allTasks,
+                                modelContext: context
+                            )
+                        } catch {
+                            print("❌ [HealthKit] Failed to fetch tasks for sync: \(error)")
+                        }
+                    }
+                }
+            }
+        }
     }
+
+    @Environment(\.scenePhase) private var scenePhase
 }
 
 // MARK: - App Delegate for Foreground Notifications

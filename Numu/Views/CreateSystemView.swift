@@ -644,8 +644,7 @@ struct AddTaskSheet: View {
                                             .foregroundStyle(.secondary)
                                             .padding(.vertical, 8)
                                             .padding(.horizontal, 12)
-                                            .background(Color(.systemGray6).opacity(0.5))
-                                            .cornerRadius(8)
+                                            .background(Color(.systemGray6).opacity(0.5), in: RoundedRectangle(cornerRadius: 8))
 
                                         // If specific activity selected, show metric picker
                                         if selectedActivityGroup == .specificActivity {
@@ -680,8 +679,7 @@ struct AddTaskSheet: View {
                                         }
                                         .padding(.vertical, 8)
                                         .padding(.horizontal, 12)
-                                        .background(Color(.systemGreen).opacity(0.1))
-                                        .cornerRadius(8)
+                                        .background(Color(.systemGreen).opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
                                     }
                                     .padding(.vertical, 8)
                                 }
