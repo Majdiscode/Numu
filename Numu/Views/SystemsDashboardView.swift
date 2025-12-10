@@ -33,6 +33,12 @@ struct SystemsDashboardView: View {
     @State private var animatedDailyPercentage: Double = 0.0
     @State private var animatedWeeklyPercentage: Double = 0.0
 
+    // MARK: - Animated Gauge Values for Smooth Fill
+    @State private var animatedDailyGaugeValue: Double = 0.0
+    @State private var animatedWeeklyGaugeValue: Double = 0.0
+    @State private var dailyGaugeFillTimer: Timer?
+    @State private var weeklyGaugeFillTimer: Timer?
+
     // MARK: - Performance Optimization: Cached Stats
     @State private var cachedOverallCompletionRate: Double = 0.0
     @State private var cachedTotalActiveSystems: Int = 0
@@ -48,6 +54,7 @@ struct SystemsDashboardView: View {
     #if DEBUG
     @State private var showDebugMenu = false
     @State private var debugTapCount = 0
+    @State private var showLiquidGlassDemo = false
     #endif
 
     // MARK: - Optimized Computed Properties (Use Cached Values)
@@ -140,53 +147,37 @@ struct SystemsDashboardView: View {
         let reachingWeeklyCompletion = !isInitialLoad && newWeeklyRate == 1.0 && cachedOverallWeeklyCompletionRate < 1.0 && tempTotalWeeklyTasks > 0
 
         if reachingDailyCompletion || reachingWeeklyCompletion {
-            // Delay the stats update to allow system progress ring to animate first
-            isAnimatingCompletion = true
+            // Update stats with animation
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+                updateCachedStats(
+                    todaysTasks: tempTotalTodaysTasks,
+                    completedTasks: tempTotalCompletedTasks,
+                    activeSystems: tempActiveSystems,
+                    weeklyTasks: tempTotalWeeklyTasks,
+                    completedWeeklyTasks: tempCompletedWeeklyTasks,
+                    weeklyCompletions: tempTotalWeeklyCompletions,
+                    weeklyTarget: tempTotalWeeklyTarget,
+                    dailyRate: newDailyRate,
+                    weeklyRate: newWeeklyRate
+                )
+            }
 
-            // Brief pause for system animation (0.3s), then scroll
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                // Scroll to top (if already at top, this completes instantly)
-                shouldScrollToTop = true
+            // Trigger celebration and haptics after a brief delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                // Big completion haptic
+                if reachingDailyCompletion && reachingWeeklyCompletion {
+                    hapticManager.perfectDayCompleted()
+                } else if reachingDailyCompletion {
+                    hapticManager.dailyGoalCompleted()
+                } else if reachingWeeklyCompletion {
+                    hapticManager.weeklyGoalCompleted()
+                }
 
-                // Wait for potential scroll animation (0.6s spring)
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
-                    // Start pulsing haptic feedback during progress fill
-                    self.startProgressFillHaptics()
-
-                    // Now update the progress bars with smooth 1.0s animation
-                    withAnimation(.easeOut(duration: 1.0)) {
-                        self.updateCachedStats(
-                            todaysTasks: tempTotalTodaysTasks,
-                            completedTasks: tempTotalCompletedTasks,
-                            activeSystems: tempActiveSystems,
-                            weeklyTasks: tempTotalWeeklyTasks,
-                            completedWeeklyTasks: tempCompletedWeeklyTasks,
-                            weeklyCompletions: tempTotalWeeklyCompletions,
-                            weeklyTarget: tempTotalWeeklyTarget,
-                            dailyRate: newDailyRate,
-                            weeklyRate: newWeeklyRate
-                        )
-                    }
-
-                    // Trigger big haptic and celebration after progress bar fills (1.0s animation + small buffer)
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.05) {
-                        // Big completion haptic
-                        if reachingDailyCompletion && reachingWeeklyCompletion {
-                            hapticManager.perfectDayCompleted()
-                        } else if reachingDailyCompletion {
-                            hapticManager.dailyGoalCompleted()
-                        } else if reachingWeeklyCompletion {
-                            hapticManager.weeklyGoalCompleted()
-                        }
-
-                        if reachingDailyCompletion {
-                            triggerCelebration(isWeekly: false)
-                        }
-                        if reachingWeeklyCompletion {
-                            triggerCelebration(isWeekly: true)
-                        }
-                        isAnimatingCompletion = false
-                    }
+                if reachingDailyCompletion {
+                    triggerCelebration(isWeekly: false)
+                }
+                if reachingWeeklyCompletion {
+                    triggerCelebration(isWeekly: true)
                 }
             }
         } else {
@@ -219,10 +210,10 @@ struct SystemsDashboardView: View {
 
                 if isCardLayoutChanging {
                     print("🔄 [PERF] Card layout changing (\(oldCardCount) → \(newCardCount) cards)")
-                    print("🎬 [PERF] Starting 0.8s morph animation NOW")
+                    print("🎬 [PERF] Starting morph animation NOW")
 
-                    // Slower morph to see performance impact of removing shadows
-                    withAnimation(.easeInOut(duration: 0.8)) {
+                    // Spring animation with extra bounce for dramatic morph effect
+                    withAnimation(.spring(response: 1.2, dampingFraction: 0.6)) {
                         self.updateCachedStats(
                             todaysTasks: tempTotalTodaysTasks,
                             completedTasks: tempTotalCompletedTasks,
@@ -283,6 +274,10 @@ struct SystemsDashboardView: View {
         let oldWeeklyPercent = cachedOverallWeeklyCompletionRate * 100
         let newWeeklyPercent = weeklyRate * 100
 
+        // Store old gauge values before updating rates
+        let oldDailyGaugeValue = cachedOverallCompletionRate
+        let oldWeeklyGaugeValue = cachedOverallWeeklyCompletionRate
+
         // Update the actual rates
         cachedOverallCompletionRate = dailyRate
         cachedOverallWeeklyCompletionRate = weeklyRate
@@ -290,6 +285,15 @@ struct SystemsDashboardView: View {
         // Animate the displayed percentages
         animatePercentage(from: oldDailyPercent, to: newDailyPercent, isWeekly: false)
         animatePercentage(from: oldWeeklyPercent, to: newWeeklyPercent, isWeekly: true)
+
+        // Trigger slow fill animation for gauges if values changed significantly
+        if abs(dailyRate - oldDailyGaugeValue) > 0.01 {
+            slowFillDailyGauge(to: dailyRate)
+        }
+
+        if abs(weeklyRate - oldWeeklyGaugeValue) > 0.01 {
+            slowFillWeeklyGauge(to: weeklyRate)
+        }
 
         statsNeedRefresh = false
     }
@@ -321,6 +325,62 @@ struct SystemsDashboardView: View {
         }
     }
 
+    // MARK: - Slow Fill Animations for Gauges
+
+    private func slowFillDailyGauge(to target: Double, duration: Double = 1.0) {
+        // Stop any existing animation
+        dailyGaugeFillTimer?.invalidate()
+
+        let startValue = animatedDailyGaugeValue
+
+        // Calculate how many steps we need (60 fps)
+        // Fixed 1 second duration means bigger changes fill visually faster
+        let steps = duration * 60
+        let totalChange = target - startValue
+        let increment = totalChange / steps
+        let interval = duration / steps
+
+        var currentStep = 0.0
+
+        dailyGaugeFillTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
+            currentStep += 1
+
+            if currentStep >= steps {
+                self.animatedDailyGaugeValue = target
+                timer.invalidate()
+            } else {
+                self.animatedDailyGaugeValue += increment
+            }
+        }
+    }
+
+    private func slowFillWeeklyGauge(to target: Double, duration: Double = 1.0) {
+        // Stop any existing animation
+        weeklyGaugeFillTimer?.invalidate()
+
+        let startValue = animatedWeeklyGaugeValue
+
+        // Calculate how many steps we need (60 fps)
+        // Fixed 1 second duration means bigger changes fill visually faster
+        let steps = duration * 60
+        let totalChange = target - startValue
+        let increment = totalChange / steps
+        let interval = duration / steps
+
+        var currentStep = 0.0
+
+        weeklyGaugeFillTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
+            currentStep += 1
+
+            if currentStep >= steps {
+                self.animatedWeeklyGaugeValue = target
+                timer.invalidate()
+            } else {
+                self.animatedWeeklyGaugeValue += increment
+            }
+        }
+    }
+
     private func resetCachedStats() {
         cachedOverallCompletionRate = 0.0
         cachedTotalActiveSystems = 0
@@ -333,6 +393,10 @@ struct SystemsDashboardView: View {
         cachedTotalCompletedTasks = 0
         animatedDailyPercentage = 0.0
         animatedWeeklyPercentage = 0.0
+        animatedDailyGaugeValue = 0.0
+        animatedWeeklyGaugeValue = 0.0
+        dailyGaugeFillTimer?.invalidate()
+        weeklyGaugeFillTimer?.invalidate()
         isInitialLoad = true
     }
 
@@ -378,13 +442,26 @@ struct SystemsDashboardView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                // Layered background for depth
-                Color(.systemGroupedBackground)
-                    .ignoresSafeArea()
+                // Simple system background
+                Color(UIColor { traitCollection in
+                    traitCollection.userInterfaceStyle == .dark
+                        ? UIColor(white: 0.1, alpha: 1.0)
+                        : UIColor(white: 0.92, alpha: 1.0)
+                })
+                .ignoresSafeArea()
 
                 ScrollViewReader { proxy in
                     ScrollView {
                         VStack(spacing: 16) {
+                            // MARK: - Header with Progress Title
+                            HStack {
+                                Text("Progress")
+                                    .font(.largeTitle)
+                                    .fontWeight(.bold)
+                                Spacer()
+                            }
+                            .padding(.top, 4)
+
                             // MARK: - CloudKit Status Banner
                             if cloudKitService.syncStatus == .notSignedIn {
                                 cloudKitStatusBanner
@@ -395,35 +472,31 @@ struct SystemsDashboardView: View {
                                 let hasDaily = !systems.isEmpty
                                 let hasWeekly = totalWeeklyTasks > 0
 
-                                if hasDaily && hasWeekly {
-                                    // Two cards - use circular rings side by side
+                                GlassEffectContainer(spacing: 12.0) {
                                     HStack(spacing: 12) {
-                                        overallProgressCard
-                                            .matchedGeometryEffect(id: "dailyCard", in: progressCardNamespace)
-                                            .transition(.opacity)
+                                        if hasDaily && hasWeekly {
+                                            // Two cards: both use circular rings
+                                            dailyCircularCard
+                                                .glassEffectID("dailyCard", in: progressCardNamespace)
 
-                                        weeklyProgressCard
-                                            .matchedGeometryEffect(id: "weeklyCard", in: progressCardNamespace)
-                                            .transition(.opacity)
+                                            weeklyCircularCard
+                                                .glassEffectID("weeklyCard", in: progressCardNamespace)
+                                        } else if hasDaily {
+                                            // Single daily card: use horizontal bar
+                                            dailyLinearProgressCard
+                                                .glassEffectID("dailyCard", in: progressCardNamespace)
+                                        } else if hasWeekly {
+                                            // Single weekly card: use horizontal bar
+                                            singleWeeklyProgressCard
+                                                .glassEffectID("weeklyCard", in: progressCardNamespace)
+                                        }
                                     }
-                                    .id("dualCards")
-                                } else if hasDaily {
-                                    // Single daily card - use horizontal bar
-                                    singleDailyProgressCard
-                                        .matchedGeometryEffect(id: "dailyCard", in: progressCardNamespace)
-                                        .transition(.opacity)
-                                        .id("singleDaily")
-                                } else {
-                                    // Single weekly card - use horizontal bar
-                                    singleWeeklyProgressCard
-                                        .matchedGeometryEffect(id: "weeklyCard", in: progressCardNamespace)
-                                        .transition(.opacity)
-                                        .id("singleWeekly")
                                 }
+                                .glassEffectTransition(.matchedGeometry)
                             }
 
                         // MARK: - Systems List
-                        systemsList
+                        systemsList(proxy: proxy)
 
                         // MARK: - Empty State
                         if systems.isEmpty {
@@ -431,7 +504,7 @@ struct SystemsDashboardView: View {
                         }
                         }
                         .padding(.horizontal)
-                        .padding(.top, 8)
+                        .padding(.top, 4)
                         .padding(.bottom)
                     }
                     .onChange(of: shouldScrollToTop) { _, newValue in
@@ -459,7 +532,7 @@ struct SystemsDashboardView: View {
                             .tint(.white)
 
                         Text("Clearing test data...")
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.primary)
                             .font(.headline)
                     }
                 }
@@ -478,54 +551,41 @@ struct SystemsDashboardView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Progress")
-                        .font(.title2)
-                        .fontWeight(.bold)
-                }
-
-                ToolbarItem(placement: .primaryAction) {
+                ToolbarItemGroup(placement: .navigationBarTrailing) {
+                    #if DEBUG
                     Button {
-                        // Haptic feedback
+                        createTestWeeklySystem()
+                    } label: {
+                        Image(systemName: "plus.square.on.square")
+                    }
+
+                    Button {
+                        deleteAllWeeklySystems()
+                    } label: {
+                        Image(systemName: "trash")
+                    }
+
+                    Button {
+                        handleDebugTap()
+                    } label: {
+                        Image(systemName: "ant")
+                    }
+
+                    Button {
+                        showLiquidGlassDemo = true
+                    } label: {
+                        Image(systemName: "sparkles")
+                    }
+                    #endif
+
+                    Button {
                         let impact = UIImpactFeedbackGenerator(style: .medium)
                         impact.impactOccurred()
-
                         showCreateSystem = true
                     } label: {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title3)
+                        Image(systemName: "plus")
                     }
                 }
-
-                #if DEBUG
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack(spacing: 12) {
-                        Button {
-                            createTestWeeklySystem()
-                        } label: {
-                            Image(systemName: "plus.square.fill.on.square.fill")
-                                .font(.title3)
-                                .foregroundStyle(.blue)
-                        }
-
-                        Button {
-                            deleteAllWeeklySystems()
-                        } label: {
-                            Image(systemName: "trash.square.fill")
-                                .font(.title3)
-                                .foregroundStyle(.red)
-                        }
-
-                        Button {
-                            handleDebugTap()
-                        } label: {
-                            Image(systemName: "ant.circle")
-                                .font(.title3)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-                #endif
             }
             .sheet(isPresented: $showCreateSystem) {
                 CreateSystemView()
@@ -534,9 +594,15 @@ struct SystemsDashboardView: View {
             .sheet(isPresented: $showDebugMenu) {
                 DebugMenuView(isDeletingTestData: $isDeletingTestData)
             }
+            .sheet(isPresented: $showLiquidGlassDemo) {
+                LiquidGlassDemoView()
+            }
             #endif
             .onAppear {
                 cloudKitService.checkAccountStatus()
+                // Initialize gauge values to current cached values on first appear
+                animatedDailyGaugeValue = cachedOverallCompletionRate
+                animatedWeeklyGaugeValue = cachedOverallWeeklyCompletionRate
                 refreshDashboardStats()
             }
             .onChange(of: showCreateSystem) { _, isShowing in
@@ -681,227 +747,204 @@ struct SystemsDashboardView: View {
         .elevation(.level1)
     }
 
-    // MARK: - Single Daily Progress Card (Horizontal Bar)
-    private var singleDailyProgressCard: some View {
-        VStack(spacing: 16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Today")
+    // MARK: - Daily Linear Progress Card (Horizontal Bar)
+    private var dailyLinearProgressCard: some View {
+        Button(action: {}) {
+            VStack(spacing: 16) {
+                HStack(alignment: .center) {
+                    HStack(spacing: 4) {
+                        Text("Daily")
+                            .font(.title3)
+                            .fontWeight(.bold)
+
+                        Text("\(Int(animatedDailyGaugeValue * 100))%")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .monospacedDigit()
+                            .contentTransition(.numericText(countsDown: false))
+                    }
+
+                    Spacer()
+
+                    Text("\(totalCompletedTasks) / \(totalTodaysTasks)")
                         .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-
-                    Text("\(Int(animatedDailyPercentage))%")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .contentTransition(.numericText(countsDown: false))
+                        .foregroundStyle(.secondary)
                 }
 
-                Spacer()
-            }
+                // Custom Horizontal Progress Bar with Gradient
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        // Background
+                        Capsule()
+                            .fill(Color.primary.opacity(0.1))
 
-            // Horizontal Progress Bar
-            GeometryReader { geometry in
-                let filledWidth = geometry.size.width * overallCompletionRate
-
-                ZStack(alignment: .leading) {
-                    // Background
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-
-                    // Gradient progress bar
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(progressBarGradient)
-                        .frame(width: geometry.size.width)
-                        .mask(
-                            HStack(spacing: 0) {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .frame(width: filledWidth)
-                                Spacer(minLength: 0)
-                            }
-                        )
+                        // Filled portion with gradient (blue to pink)
+                        Capsule()
+                            .fill(LinearGradient(
+                                colors: [
+                                    Color(red: 0.0, green: 0.5, blue: 1.0),  // Bright electric blue
+                                    Color(red: 0.6, green: 0.3, blue: 1.0),  // Vivid purple
+                                    Color(red: 1.0, green: 0.2, blue: 0.6)   // Hot pink
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                            .frame(width: geometry.size.width * max(0, min(1, animatedDailyGaugeValue)))
+                    }
                 }
+                .frame(height: 12)
             }
-            .frame(height: 12)
-
-            HStack(spacing: 4) {
-                Text("\(totalCompletedTasks)")
-                    .font(.callout)
-                    .fontWeight(.bold)
-                Text("/ \(totalTodaysTasks)")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 22)
+            .frame(maxWidth: .infinity)
         }
-        .padding(20)
-        .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.5),
-                            Color.white.opacity(0.1),
-                            Color.white.opacity(0.0)
-                        ],
-                        startPoint: motionGradientPoints().start,
-                        endPoint: motionGradientPoints().end
-                    ),
-                    lineWidth: 1
-                )
-        )
+        .buttonStyle(.glass)
     }
 
     // MARK: - Single Weekly Progress Card (Horizontal Bar)
     private var singleWeeklyProgressCard: some View {
-        VStack(spacing: 16) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Weekly")
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
+        Button(action: {}) {
+            VStack(spacing: 12) {
+                HStack(alignment: .center) {
+                    HStack(spacing: 4) {
+                        Text("Weekly")
+                            .font(.title3)
+                            .fontWeight(.bold)
 
-                    Text("\(Int(min(100, max(0, animatedWeeklyPercentage))))%")
-                        .font(.system(size: 48, weight: .bold, design: .rounded))
+                        Text("\(Int(min(100, max(0, animatedWeeklyGaugeValue * 100))))%")
+                            .font(.title3)
+                            .fontWeight(.bold)
+                            .monospacedDigit()
+                            .contentTransition(.numericText(countsDown: false))
+                    }
+
+                    Spacer()
+
+                    Text("\(max(0, totalWeeklyCompletions)) / \(max(0, totalWeeklyTarget))")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                // Custom Horizontal Progress Bar with Gradient
+                GeometryReader { geometry in
+                    ZStack(alignment: .leading) {
+                        // Background
+                        Capsule()
+                            .fill(Color.primary.opacity(0.1))
+
+                        // Filled portion with gradient
+                        Capsule()
+                            .fill(LinearGradient(
+                                colors: [
+                                    Color(red: 0.2, green: 0.8, blue: 0.3),  // Bright green
+                                    Color(red: 0.5, green: 0.9, blue: 0.2),  // Yellow-green
+                                    Color(red: 1.0, green: 0.8, blue: 0.0)   // Golden yellow
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                            .frame(width: geometry.size.width * max(0, min(1, animatedWeeklyGaugeValue)))
+                    }
+                }
+                .frame(height: 12)
+            }
+            .padding(.horizontal, 30)
+            .padding(.vertical, 24)
+            .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.glass)
+    }
+
+    // MARK: - Daily Circular Card (for dual card layout)
+    private var dailyCircularCard: some View {
+        Button(action: {}) {
+            VStack(spacing: 8) {
+                Text("Daily")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+
+                // Circular Progress Ring
+                ZStack {
+                    Circle()
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 9)
+
+                    Circle()
+                        .trim(from: 0, to: max(0, min(1, animatedDailyGaugeValue)))
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.0, green: 0.5, blue: 1.0),  // Bright electric blue
+                                    Color(red: 0.6, green: 0.3, blue: 1.0),  // Vivid purple
+                                    Color(red: 1.0, green: 0.2, blue: 0.6)   // Hot pink
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 9, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+
+                    Text("\(Int(animatedDailyGaugeValue * 100))%")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .contentTransition(.numericText(countsDown: false))
                 }
+                .frame(width: 90, height: 90)
 
-                Spacer()
-            }
-
-            // Horizontal Progress Bar
-            GeometryReader { geometry in
-                let safeRate = min(1.0, max(0.0, overallWeeklyCompletionRate))
-                let filledWidth = max(0, min(geometry.size.width, geometry.size.width * safeRate))
-
-                ZStack(alignment: .leading) {
-                    // Background
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-
-                    // Gradient progress bar
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(progressBarGradient)
-                        .frame(width: geometry.size.width)
-                        .mask(
-                            HStack(spacing: 0) {
-                                RoundedRectangle(cornerRadius: 8)
-                                    .frame(width: filledWidth)
-                                Spacer(minLength: 0)
-                            }
-                        )
-                }
-            }
-            .frame(height: 12)
-
-            HStack(spacing: 4) {
-                Text("\(max(0, totalWeeklyCompletions))")
-                    .font(.callout)
-                    .fontWeight(.bold)
-                Text("/ \(max(0, totalWeeklyTarget))")
-                    .font(.callout)
+                Text("\(totalCompletedTasks) / \(totalTodaysTasks)")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
         }
-        .padding(20)
-        .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.5),
-                            Color.white.opacity(0.1),
-                            Color.white.opacity(0.0)
-                        ],
-                        startPoint: motionGradientPoints().start,
-                        endPoint: motionGradientPoints().end
-                    ),
-                    lineWidth: 1
-                )
-        )
+        .buttonStyle(.glass)
     }
 
-    // MARK: - Overall Progress Card (Circular Ring - for dual card layout)
-    private var overallProgressCard: some View {
-        VStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Today")
+    // MARK: - Weekly Circular Card (for dual card layout)
+    private var weeklyCircularCard: some View {
+        Button(action: {}) {
+            VStack(spacing: 8) {
+                Text("Weekly")
                     .font(.caption)
                     .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
 
-            // Circular Progress
-            ZStack {
-                // Background ring
-                Circle()
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 10)
-                    .frame(width: 80, height: 80)
+                // Circular Progress Ring
+                ZStack {
+                    Circle()
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 9)
 
-                // Gradient progress ring
-                Circle()
-                    .trim(from: 0, to: max(0, min(1, overallCompletionRate)))
-                    .stroke(
-                        AngularGradient(
-                            colors: [
-                                Color(red: 0.2, green: 0.6, blue: 1.0),        // Electric blue
-                                Color(red: 0.0, green: 0.8, blue: 1.0),        // Vivid cyan
-                                Color(red: 0.7, green: 0.3, blue: 1.0),        // Bright purple
-                                Color(red: 1.0, green: 0.2, blue: 0.9),        // Hot magenta
-                                Color(red: 0.2, green: 0.6, blue: 1.0)         // Back to electric blue
-                            ],
-                            center: .center
-                        ),
-                        style: StrokeStyle(lineWidth: 10, lineCap: .round)
-                    )
-                    .frame(width: 80, height: 80)
-                    .rotationEffect(.degrees(-90))
+                    Circle()
+                        .trim(from: 0, to: max(0, min(1, animatedWeeklyGaugeValue)))
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.2, green: 0.8, blue: 0.3),  // Bright green
+                                    Color(red: 0.5, green: 0.9, blue: 0.2),  // Yellow-green
+                                    Color(red: 1.0, green: 0.8, blue: 0.0)   // Golden yellow
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            style: StrokeStyle(lineWidth: 9, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
 
-                // Percentage text with counting animation
-                Text("\(Int(animatedDailyPercentage))%")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .monospacedDigit()
-                    .contentTransition(.numericText(countsDown: false))
-            }
+                    Text("\(Int(min(100, max(0, animatedWeeklyGaugeValue * 100))))%")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .contentTransition(.numericText(countsDown: false))
+                }
+                .frame(width: 90, height: 90)
 
-            HStack(spacing: 4) {
-                Text("\(totalCompletedTasks)")
-                    .font(.callout)
-                    .fontWeight(.bold)
-                Text("/ \(totalTodaysTasks)")
-                    .font(.callout)
+                Text("\(totalWeeklyCompletions) / \(totalWeeklyTarget)")
+                    .font(.caption2)
                     .foregroundStyle(.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 18)
         }
-        .frame(maxWidth: .infinity)
-        .padding(16)
-        .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.5),
-                            Color.white.opacity(0.1),
-                            Color.white.opacity(0.0)
-                        ],
-                        startPoint: motionGradientPoints().start,
-                        endPoint: motionGradientPoints().end
-                    ),
-                    lineWidth: 1
-                )
-        )
+        .buttonStyle(.glass)
     }
 
     private var totalTodaysTasks: Int {
@@ -933,94 +976,16 @@ struct SystemsDashboardView: View {
         }
     }
 
-    // Smooth gradient that flows from blue → cyan → purple → magenta as progress increases
+    // Smooth gradient that flows from blue to pink
     private var progressBarGradient: LinearGradient {
-        // Vibrant, saturated colors that avoid washing out to white
-        let brightBlue = Color(red: 0.2, green: 0.6, blue: 1.0)        // Electric blue
-        let brightCyan = Color(red: 0.0, green: 0.8, blue: 1.0)        // Vivid cyan
-        let brightPurple = Color(red: 0.7, green: 0.3, blue: 1.0)      // Bright purple (bridge color)
-        let brightMagenta = Color(red: 1.0, green: 0.2, blue: 0.9)     // Hot magenta/pink
+        let brightBlue = Color(red: 0.0, green: 0.5, blue: 1.0)        // Bright electric blue
+        let vividPurple = Color(red: 0.6, green: 0.3, blue: 1.0)       // Vivid purple
+        let hotPink = Color(red: 1.0, green: 0.2, blue: 0.6)           // Hot pink
 
         return LinearGradient(
-            colors: [brightBlue, brightCyan, brightPurple, brightMagenta],
+            colors: [brightBlue, vividPurple, hotPink],
             startPoint: .leading,
             endPoint: .trailing
-        )
-    }
-
-    // MARK: - Weekly Progress Card
-    private var weeklyProgressCard: some View {
-        VStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Weekly")
-                    .font(.caption)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            // Circular Progress
-            ZStack {
-                // Background ring
-                Circle()
-                    .stroke(Color.gray.opacity(0.2), lineWidth: 10)
-                    .frame(width: 80, height: 80)
-
-                // Gradient progress ring
-                Circle()
-                    .trim(from: 0, to: max(0, min(1, overallWeeklyCompletionRate)))
-                    .stroke(
-                        AngularGradient(
-                            colors: [
-                                Color(red: 0.2, green: 0.6, blue: 1.0),        // Electric blue
-                                Color(red: 0.0, green: 0.8, blue: 1.0),        // Vivid cyan
-                                Color(red: 0.7, green: 0.3, blue: 1.0),        // Bright purple
-                                Color(red: 1.0, green: 0.2, blue: 0.9),        // Hot magenta
-                                Color(red: 0.2, green: 0.6, blue: 1.0)         // Back to electric blue
-                            ],
-                            center: .center
-                        ),
-                        style: StrokeStyle(lineWidth: 10, lineCap: .round)
-                    )
-                    .frame(width: 80, height: 80)
-                    .rotationEffect(.degrees(-90))
-
-                // Percentage text with counting animation
-                Text("\(Int(min(100, max(0, animatedWeeklyPercentage))))%")
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .monospacedDigit()
-                    .contentTransition(.numericText(countsDown: false))
-            }
-
-            HStack(spacing: 4) {
-                Text("\(max(0, totalWeeklyCompletions))")
-                    .font(.callout)
-                    .fontWeight(.bold)
-                Text("/ \(max(0, totalWeeklyTarget))")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(16)
-        .background(.ultraThickMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.5),
-                            Color.white.opacity(0.1),
-                            Color.white.opacity(0.0)
-                        ],
-                        startPoint: motionGradientPoints().start,
-                        endPoint: motionGradientPoints().end
-                    ),
-                    lineWidth: 1
-                )
         )
     }
 
@@ -1044,13 +1009,13 @@ struct SystemsDashboardView: View {
     }
 
     // MARK: - Systems Grid (Widget Layout)
-    private var systemsList: some View {
+    private func systemsList(proxy: ScrollViewProxy) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             // Don't render systems during deletion to avoid accessing deleted objects
             if !isDeletingTestData && !systems.isEmpty {
                 HStack {
                     Text("Systems")
-                        .font(.title2)
+                        .font(.title)
                         .fontWeight(.bold)
 
                     Spacer()
@@ -1069,7 +1034,8 @@ struct SystemsDashboardView: View {
                 VStack(spacing: 12) {
                     ForEach(systems) { system in
                         NavigationLink(destination: SystemDetailView(system: system)) {
-                            SystemWidgetCard(system: system, modelContext: modelContext)
+                            SystemWidgetCard(system: system, modelContext: modelContext, scrollProxy: proxy)
+                                .id("system-\(system.id)")
                         }
                         .buttonStyle(.plain)
                     }
@@ -1138,6 +1104,7 @@ struct SystemsDashboardView: View {
 struct SystemWidgetCard: View {
     let system: System
     let modelContext: ModelContext
+    let scrollProxy: ScrollViewProxy
 
     @Environment(HapticManager.self) private var hapticManager
     @Environment(MotionManager.self) private var motionManager
@@ -1147,7 +1114,9 @@ struct SystemWidgetCard: View {
     @State private var cachedWeeklyTasks: [HabitTask] = []
     @State private var cachedDueTests: [PerformanceTest] = []
     @State private var cachedCompletionRate: Double = 0.0
+    @State private var animatedCompletionRate: Double = 0.0
     @State private var isExpanded: Bool = false
+    @State private var fillTimer: Timer?
 
     private func refreshCache() {
         cachedTodaysTasks = system.todaysTasks
@@ -1157,6 +1126,8 @@ struct SystemWidgetCard: View {
         // Calculate completion rate including both daily and weekly tasks
         let dailyTasks = cachedTodaysTasks
         let weeklyTasks = cachedWeeklyTasks
+
+        let oldRate = cachedCompletionRate
 
         if dailyTasks.isEmpty && weeklyTasks.isEmpty {
             cachedCompletionRate = 0.0
@@ -1187,6 +1158,38 @@ struct SystemWidgetCard: View {
             let totalTasks = dailyTasks.count + weeklyTasks.count
             cachedCompletionRate = (dailyProgress + weeklyProgress) / Double(totalTasks)
         }
+
+        // Trigger slow fill animation if completion changed
+        if abs(cachedCompletionRate - oldRate) > 0.01 {
+            slowFillTo(cachedCompletionRate, duration: 1.0)
+        }
+    }
+
+    private func slowFillTo(_ target: Double, duration: Double) {
+        // Stop any existing animation
+        fillTimer?.invalidate()
+
+        let startValue = animatedCompletionRate
+
+        // Calculate how many steps we need (60 fps)
+        // Fixed duration means bigger changes fill visually faster
+        let steps = duration * 60
+        let totalChange = target - startValue
+        let increment = totalChange / steps
+        let interval = duration / steps
+
+        var currentStep = 0.0
+
+        fillTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { timer in
+            currentStep += 1
+
+            if currentStep >= steps {
+                animatedCompletionRate = target
+                timer.invalidate()
+            } else {
+                animatedCompletionRate += increment
+            }
+        }
     }
 
     var body: some View {
@@ -1213,54 +1216,34 @@ struct SystemWidgetCard: View {
 
                 Spacer()
 
-                // Completion circle with 3D glossy effect
+                // Completion circle with gradient
                 ZStack {
-                    // Background ring
                     Circle()
-                        .stroke(
-                            AngularGradient(
-                                colors: [
-                                    Color.gray.opacity(0.12),
-                                    Color.gray.opacity(0.2),
-                                    Color.gray.opacity(0.12)
-                                ],
-                                center: .center,
-                                startAngle: .degrees(0),
-                                endAngle: .degrees(360)
-                            ),
-                            lineWidth: 5
-                        )
-                        .frame(width: 48, height: 48)
+                        .stroke(Color.primary.opacity(0.1), lineWidth: 6)
 
-                    // Foreground progress ring with glossy gradient (white to bright)
                     Circle()
-                        .trim(from: 0, to: max(0, min(1, cachedCompletionRate)))
+                        .trim(from: 0, to: max(0, min(1, animatedCompletionRate)))
                         .stroke(
-                            AngularGradient(
+                            LinearGradient(
                                 colors: [
-                                    Color.white.opacity(0.7),           // Whitish highlight
-                                    Color(hex: system.color),            // Bright color
-                                    Color(hex: system.color).opacity(0.8), // Mid
-                                    Color.white.opacity(0.7)             // Back to whitish
+                                    Color(hex: system.color).opacity(0.4),
+                                    Color(hex: system.color),
+                                    Color(hex: system.color).opacity(0.9)
                                 ],
-                                center: .center,
-                                startAngle: .degrees(0),
-                                endAngle: .degrees(360)
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
                             ),
-                            style: StrokeStyle(lineWidth: 5, lineCap: .round)
+                            style: StrokeStyle(lineWidth: 6, lineCap: .round)
                         )
-                        .frame(width: 48, height: 48)
                         .rotationEffect(.degrees(-90))
-                        .animation(.spring(response: 0.5), value: cachedCompletionRate)
 
-                    Text("\(Int(max(0, min(100, cachedCompletionRate * 100))))")
-                        .font(.caption)
-                        .fontWeight(.bold)
+                    Text("\(Int(max(0, min(100, animatedCompletionRate * 100))))")
+                        .font(.system(size: 12, weight: .bold))
                 }
+                .frame(width: 50, height: 50)
             }
             .padding(16)
             .frame(maxWidth: .infinity)
-            .background(Color(.secondarySystemGroupedBackground))
 
             // Expandable Tasks Dropdown
             if !cachedTodaysTasks.isEmpty || !cachedWeeklyTasks.isEmpty {
@@ -1270,8 +1253,22 @@ struct SystemWidgetCard: View {
                         let impact = UIImpactFeedbackGenerator(style: .medium)
                         impact.impactOccurred()
 
+                        // Capture current state before toggling
+                        let willExpand = !isExpanded
+
+                        // Toggle expansion with animation
                         withAnimation(.easeInOut(duration: 0.25)) {
                             isExpanded.toggle()
+                        }
+
+                        // Auto-scroll when expanding to ensure full card is visible
+                        if willExpand {
+                            // Wait for expansion animation to complete, then scroll
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                withAnimation(.easeInOut(duration: 0.5)) {
+                                    scrollProxy.scrollTo("system-\(system.id)", anchor: .top)
+                                }
+                            }
                         }
                     } label: {
                         HStack {
@@ -1286,7 +1283,7 @@ struct SystemWidgetCard: View {
                                 .fontWeight(.semibold)
                                 .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                         .padding(.horizontal, 20)
                         .padding(.vertical, 16)
                         .contentShape(Rectangle())
@@ -1333,28 +1330,11 @@ struct SystemWidgetCard: View {
                 }
             }
         }
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.5),
-                            Color.white.opacity(0.1),
-                            Color.white.opacity(0.0)
-                        ],
-                        startPoint: motionGradientPoints().start,
-                        endPoint: motionGradientPoints().end
-                    ),
-                    lineWidth: 1
-                )
-        )
-        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
-        .shadow(color: .black.opacity(0.15), radius: 10, x: 0, y: 5)
-        .shadow(color: .black.opacity(0.2), radius: 20, x: 0, y: 10)
+        .glassEffect(in: RoundedRectangle(cornerRadius: 25))
         .onAppear {
             refreshCache()
+            // Initialize animated value to current value on first load (no animation)
+            animatedCompletionRate = cachedCompletionRate
         }
         .onReceive(NotificationCenter.default.publisher(for: Notification.Name("TaskCompletionChanged"))) { _ in
             refreshCache()
@@ -1656,7 +1636,7 @@ struct TaskRow: View {
                         Text("Break")
                             .font(.caption2)
                             .fontWeight(.semibold)
-                            .foregroundStyle(.white)
+                            .foregroundStyle(.primary)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
                             .background(Color.orange.opacity(0.8))

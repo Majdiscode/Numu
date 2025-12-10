@@ -30,7 +30,7 @@ final class System {
     // Performance optimization: cache expensive calculations
     private var cachedConsistency: Double?
     private var consistencyCacheDate: Date?
-    private let consistencyCacheDuration: TimeInterval = 300 // 5 minutes
+    private var consistencyCacheDuration: TimeInterval = 300 // 5 minutes
 
     // Relationships (using cascade delete for data integrity)
     // CloudKit requires relationships to be optional
